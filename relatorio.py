@@ -234,9 +234,14 @@ def gerar_html(resultado):
     ref = resultado["referencia"]
     caminho = config.OUTPUT_DIR / f"relatorio_ipca_{ref:%Y_%m}.html"
 
+    # Query string com o instante de geração: evita que o proxy de imagens
+    # do Gmail (ou de outro cliente de e-mail) sirva uma versão em cache de
+    # uma tentativa anterior — por exemplo, de antes do repositório virar
+    # público, quando a mesma URL (sem a query string) ainda retornava erro.
+    cache_bust = datetime.now().strftime("%Y%m%d%H%M%S")
     grafico_src = (
         f"{config.GITHUB_REPO_URL.replace('https://github.com/', 'https://raw.githubusercontent.com/')}"
-        f"/main/saidas/grafico_ipca_{ref:%Y_%m}.png"
+        f"/main/saidas/grafico_ipca_{ref:%Y_%m}.png?v={cache_bust}"
     )
     pdf_url = f"{config.GITHUB_REPO_URL}/blob/main/saidas/relatorio_ipca_{ref:%Y_%m}.pdf"
 
