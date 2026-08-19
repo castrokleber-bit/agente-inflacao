@@ -53,7 +53,9 @@ OBSERVACAO_IPCA15 = (
     "Observação: o IPCA-15 não conta com as aberturas de núcleos de inflação, "
     "quebra por durabilidade, preços monitorados nem índice de difusão — o "
     "Banco Central calcula esses recortes apenas para o IPCA cheio, a partir "
-    "de microdados do IBGE, e não os replica para a prévia."
+    "de microdados do IBGE, e não os replica para a prévia. Por não ter "
+    "núcleo de inflação, o boletim do IPCA-15 tem edição única — sem o "
+    "conceito de 2ª edição (núcleo atualizado) que existe no IPCA cheio."
 )
 
 

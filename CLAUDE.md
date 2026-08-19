@@ -27,7 +27,9 @@ Dois boletins com o mesmo molde, selecionados por `orquestrador.py --indice=`:
 IPCA-15 **não tem** núcleos, quebra por durabilidade, monitorados nem
 difusão — o BC só calcula essas aberturas para o índice cheio (ver
 "Pendência conhecida" abaixo) — então o boletim do IPCA-15 omite essas
-seções e destaca a ausência explicitamente no texto. O IPCA cheio sai em
+seções e destaca a ausência explicitamente no texto. Por não ter núcleo,
+o IPCA-15 também **não tem o conceito de 2ª edição** — sai numa edição
+única. O IPCA cheio sai em
 **duas edições** no dia de divulgação (`--edicao=1` e `--edicao=2`): os
 núcleos costumam ser publicados pelo BC um pouco depois do índice cheio, e a
 2ª edição roda mais tarde no mesmo dia para capturar o núcleo já atualizado.
@@ -171,10 +173,17 @@ atrasado). Arquivos gerados com prefixo `ipca15` (`relatorio_ipca15_*`,
 
 **Três rotinas agendadas do Claude** (claude.ai/code/routines), cada uma
 lendo o `.html` correspondente já commitado pelo GitHub Actions e enviando
-por `mcp__Gmail__send_message` (`htmlBody`, com fallback para `.txt`) para
-kleberpcastro@gmail.com — **sem** rodar `orquestrador.py` nem chamar SGS/
-Olinda/SIDRA diretamente (o sandbox dessas rotinas tem egress de rede
-bloqueado para essas APIs; elas só leem o que o GitHub Actions já commitou):
+por `mcp__Gmail__send_message` (`htmlBody`, com fallback para `.txt`) — 
+**sem** rodar `orquestrador.py` nem chamar SGS/Olinda/SIDRA diretamente (o
+sandbox dessas rotinas tem egress de rede bloqueado para essas APIs; elas
+só leem o que o GitHub Actions já commitou):
+
+Desde 2026-08-19, os destinatários fixos das três rotinas (todos em `to`)
+são: fernando.almeida@cni.com.br, mamorim@senaicni.com.br,
+virginia.colusso@cni.com.br e kleber.castro@cni.com.br. E-mails de falha
+(quando o commit de hoje existe mas o envio dá erro) vão só para
+kleber.castro@cni.com.br. Antes dessa mudança de lista, os testes usaram
+kleberpcastro@gmail.com — histórico irrelevante agora.
 - `trig_01CKj4ztEkkZ9Tbp71xGqDQ1` — **"1ª edição"**, roda 12:25 UTC (9h25
   BRT), lê `relatorio_ipca_AAAA_MM.html`.
 - `trig_01GtLbFED522hoz12jfdUeXn` — **"2ª edição"**, roda 15:20 UTC (12h20
