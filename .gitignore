@@ -8,3 +8,4 @@ dados/macro.db-*
 saidas/*.pdf
 saidas/*.png
 saidas/*.txt
+saidas/*.html

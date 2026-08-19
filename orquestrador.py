@@ -53,10 +53,11 @@ def executar(offline=False):
         modelagem.persistir(resultado)
         log.info("[2-3/4] Modelagem: IPCA 12m = %.2f%%.", resultado["em_12m"])
 
-        # ROBÔ 4 — relatório (PDF com gráficos + texto plano para e-mail)
+        # ROBÔ 4 — relatório (PDF com gráficos, .txt e .html para e-mail)
         pdf = relatorio.gerar_pdf(resultado)
         texto = relatorio.gerar_texto(resultado)
-        log.info("[4/4] Relatório: %s (+ %s)", pdf, texto)
+        html = relatorio.gerar_html(resultado)
+        log.info("[4/4] Relatório: %s (+ %s, %s)", pdf, texto, html)
 
         dur = (datetime.now() - inicio).total_seconds()
         log.info("=== Pipeline concluído em %.1fs ===", dur)

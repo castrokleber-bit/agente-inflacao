@@ -51,7 +51,8 @@ def _fmt(v, suf="%"):
 
 def _grafico(resultado):
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    caminho = config.OUTPUT_DIR / "grafico_ipca.png"
+    ref = resultado["referencia"]
+    caminho = config.OUTPUT_DIR / f"grafico_ipca_{ref:%Y_%m}.png"
 
     mensal = resultado["serie_mensal"].tail(24)
     doze = resultado["serie_12m"].tail(24)
@@ -206,6 +207,89 @@ def gerar_texto(resultado):
     ]
     caminho.write_text("\n".join(linhas), encoding="utf-8")
     log.info("Texto do relatório gerado: %s", caminho)
+    return caminho
+
+
+def gerar_html(resultado):
+    """
+    Versão em HTML do relatório, para o corpo de e-mails — visual parecido
+    com o PDF (tabelas de KPI coloridas, gráfico), mas leve: o gráfico é
+    referenciado por URL do GitHub (raw.githubusercontent.com) em vez de
+    embutido em base64, para não repetir o travamento que anexos binários
+    causavam na rotina agendada (ver CLAUDE.md, seção Automação). Grava em
+    `saidas/relatorio_ipca_AAAA_MM.html`.
+    """
+    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    ref = resultado["referencia"]
+    caminho = config.OUTPUT_DIR / f"relatorio_ipca_{ref:%Y_%m}.html"
+
+    raw_base = config.GITHUB_REPO_URL.replace(
+        "https://github.com/", "https://raw.githubusercontent.com/"
+    ) + "/main"
+    blob_base = config.GITHUB_REPO_URL + "/blob/main"
+    grafico_url = f"{raw_base}/saidas/grafico_ipca_{ref:%Y_%m}.png"
+    pdf_url = f"{blob_base}/saidas/relatorio_ipca_{ref:%Y_%m}.pdf"
+
+    azul, azul_claro = "#1f4e79", "#eef2f7"
+    verde, verde_claro = "#2e5a2e", "#eef4ee"
+
+    def _kpi_table(cabecalho, valores, destaque, fundo):
+        celulas_cab = "".join(
+            f'<td style="background:{destaque};color:#ffffff;padding:8px 4px;'
+            f'text-align:center;font-size:11px;font-family:Arial,sans-serif;">{c}</td>'
+            for c in cabecalho
+        )
+        celulas_val = "".join(
+            f'<td style="background:{fundo};padding:10px 4px;text-align:center;'
+            f'font-size:16px;font-weight:bold;font-family:Arial,sans-serif;color:#222222;">{v}</td>'
+            for v in valores
+        )
+        return (
+            '<table role="presentation" style="width:100%;border-collapse:collapse;'
+            f'margin:0 0 8px 0;"><tr>{celulas_cab}</tr><tr>{celulas_val}</tr></table>'
+        )
+
+    kpis1 = _kpi_table(
+        ["No mês", "No ano", "12 meses", "Desvio da meta"],
+        [f"{resultado['no_mes']:.2f}%", f"{resultado['no_ano']:.2f}%",
+         f"{resultado['em_12m']:.2f}%", f"{resultado['desvio_meta']:+.2f} p.p."],
+        azul, azul_claro,
+    )
+    kpis2 = _kpi_table(
+        ["Serviços 12m", "Média núcleos 12m", "Difusão", f"Focus {resultado['focus_ano']}"],
+        [_fmt(resultado["servicos_12m"]), _fmt(resultado["nucleos_12m"]),
+         _fmt(resultado["difusao"]), _fmt(resultado["focus_mediana"])],
+        verde, verde_claro,
+    )
+
+    html = f"""\
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222222;">
+  <h1 style="color:{azul};font-size:22px;margin:0 0 2px 0;">Monitor de Inflação — IPCA</h1>
+  <p style="color:{azul};font-size:12px;margin:0 0 16px 0;">
+    {config.INSTITUICAO} &middot; referência: {MESES[ref.month]}/{ref.year}
+  </p>
+
+  {kpis1}
+  {kpis2}
+
+  <p style="line-height:1.55;font-size:14px;margin:16px 0;">{_comentario(resultado)}</p>
+
+  <img src="{grafico_url}" alt="Gráficos do IPCA" style="max-width:100%;height:auto;
+       border:1px solid #dddddd;border-radius:4px;margin:8px 0 16px 0;" />
+
+  <h2 style="color:{azul};font-size:15px;margin:16px 0 6px 0;">Movimentos do mês</h2>
+  <p style="line-height:1.55;font-size:14px;margin:0 0 16px 0;">{_movimentos(resultado)}</p>
+
+  <p style="font-size:11px;color:#888888;line-height:1.5;margin-top:24px;">
+    Fontes: Banco Central do Brasil — SGS (IPCA e recortes), IBGE/SIDRA (peso por grupo)
+    e Olinda/Expectativas de Mercado (mediana do Focus). Documento gerado automaticamente
+    pelo Agente de Inflação.<br/>
+    <a href="{pdf_url}" style="color:{azul};">Baixar o PDF completo</a>
+  </p>
+</div>
+"""
+    caminho.write_text(html, encoding="utf-8")
+    log.info("HTML do relatório gerado: %s", caminho)
     return caminho
 
 

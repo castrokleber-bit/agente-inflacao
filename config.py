@@ -14,6 +14,11 @@ DB_PATH = BASE_DIR / "dados" / "macro.db"          # SQLite lido pelo MCP
 OUTPUT_DIR = BASE_DIR / "saidas"                    # PDFs e gráficos
 LOG_PATH = BASE_DIR / "execucao.log"
 
+# Repositório onde o pipeline é commitado (necessário para a automação em
+# nuvem — a rotina agendada não roda neste PC, então o e-mail HTML referencia
+# gráfico e PDF por URL do GitHub em vez de anexo binário).
+GITHUB_REPO_URL = "https://github.com/castrokleber-bit/agente-inflacao"
+
 # --- Fonte 1: Banco Central / SGS (séries realizadas) -----------------------
 # Endpoint confirmado:
 #   https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados?formato=json
