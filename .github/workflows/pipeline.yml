@@ -1,12 +1,25 @@
 # Agendamento em "produção" sem servidor próprio.
-# Roda o pipeline toda manhã (07:00 BRT = 10:00 UTC) e guarda o PDF como
-# artefato do run. Para enviar por e-mail/Slack, acrescente um passo no fim.
+#
+# As datas de divulgação do IPCA não seguem um padrão fixo de cron (variam
+# entre os dias ~5 e ~13 de cada mês). Em vez de tentar acertar o dia exato,
+# este workflow roda TODO DIA nessa janela, às 9h01 BRT (12:01 UTC), e o
+# script verificar_divulgacao_ipca.py decide — contra o calendário oficial
+# do IBGE — se é para valer ou não. Na maioria dos dias, ele apenas verifica
+# e não faz mais nada.
+#
+# Quando é dia de divulgação: roda o pipeline completo e commita o PDF em
+# saidas/ (normalmente ignorado pelo .gitignore — forçado aqui de propósito)
+# para que outras automações (ex.: envio de e-mail) consigam detectar que
+# saiu relatório novo hoje, sem precisar bater nas APIs do BC/IBGE de novo.
 name: monitor-inflacao
 
 on:
   schedule:
-    - cron: "0 10 * * 1-5"   # seg-sex, 10:00 UTC
+    - cron: "1 12 5-13 * *"   # todo dia, do dia 5 ao 13 de cada mês, 12:01 UTC
   workflow_dispatch: {}       # permite rodar manualmente pelo botão
+
+permissions:
+  contents: write   # necessário para commitar o PDF de volta no repositório
 
 jobs:
   executar:
@@ -21,11 +34,27 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
+      - name: Checar se hoje é dia de divulgação do IPCA
+        id: divulgacao
+        run: python verificar_divulgacao_ipca.py
+        continue-on-error: true
+
       - name: Rodar pipeline
+        if: steps.divulgacao.outcome == 'success'
         run: python orquestrador.py
 
-      - name: Publicar relatório
+      - name: Publicar relatório (artefato do run)
+        if: steps.divulgacao.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: relatorio-ipca
           path: saidas/*.pdf
+
+      - name: Commitar relatório no repositório
+        if: steps.divulgacao.outcome == 'success'
+        run: |
+          git config user.name "agente-inflacao-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f saidas/*.pdf
+          git commit -m "Relatório automático: $(date -u +%Y-%m-%d)" || echo "Nada para commitar"
+          git push
