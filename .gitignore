@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.claude/
 execucao.log
 dados/macro.db
 dados/macro.db-*
