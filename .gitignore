@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+execucao.log
+dados/macro.db
+dados/macro.db-*
+saidas/*.pdf
+saidas/*.png

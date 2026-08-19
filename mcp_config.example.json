@@ -1,0 +1,29 @@
+{
+  "_comentario": [
+    "Como usar: no Claude Desktop, abra Configurações > Desenvolvedor > Editar",
+    "configuração, e cole o bloco 'mcpServers' abaixo (ajustando o caminho",
+    "absoluto do banco). Reinicie o Claude Desktop. A partir daí, você conversa",
+    "em português e o Claude lê/consulta o SQLite sozinho via SQL.",
+    "",
+    "O pacote 'mcp-server-sqlite' é instalado on-the-fly pelo 'uvx' (do uv).",
+    "Alternativa sem uv: use 'npx -y @modelcontextprotocol/server-sqlite'."
+  ],
+
+  "mcpServers": {
+    "macro-sqlite": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "/CAMINHO/ABSOLUTO/agente-inflacao/dados/macro.db"
+      ]
+    }
+  },
+
+  "_exemplos_de_perguntas_apos_conectar": [
+    "Qual foi o IPCA mensal nos últimos 12 meses? Traga em tabela.",
+    "Compare o acumulado em 12 meses do IPCA com o do IGP-M no último ano.",
+    "Em quais meses o IPCA mensal ficou acima de 0,5%?",
+    "Qual a correlação entre câmbio (média mensal) e IPCA nos últimos 3 anos?"
+  ]
+}
