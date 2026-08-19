@@ -89,9 +89,8 @@ em vez de recalcular na memória.
 ## Automação (agendamento + envio por e-mail)
 Desde 2026-08-19 o projeto vive em
 [github.com/castrokleber-bit/agente-inflacao](https://github.com/castrokleber-bit/agente-inflacao)
-(branch `main`, **repositório público** desde 2026-08-19) — necessário porque
-o agendamento roda na nuvem, sem acesso a este PC, e o e-mail do relatório
-referencia o gráfico por URL pública do repositório. Dois componentes:
+(branch `main`, repositório público) — necessário porque o agendamento roda
+na nuvem, sem acesso a este PC. Dois componentes:
 - **`.github/workflows/pipeline.yml`** — roda todo dia às 9h01 BRT entre os
   dias 5 e 13 de cada mês (a data de divulgação do IPCA não segue um cron
   fixo). `verificar_divulgacao_ipca.py` confere o calendário oficial do IBGE
@@ -103,19 +102,37 @@ referencia o gráfico por URL pública do repositório. Dois componentes:
   commit em `saidas/` datado de hoje e, se houver, lê o `.html` e usa o
   parâmetro `htmlBody` da ferramenta de Gmail conectada (com fallback para o
   `.txt` puro se a ferramenta não suportasse HTML) para enviar o relatório
-  formatado (tabelas coloridas, texto justificado, gráfico) para
-  kleberpcastro@gmail.com. **Nunca anexa arquivo nenhum** — duas lições
-  aprendidas na prática, ambas testadas e comprovadas nesta rotina:
-  1. Anexar o PDF (~75KB → ~100K caracteres em base64) trava a ferramenta de
-     e-mail — o agente precisa montar esse payload célula por célula dentro
-     do próprio contexto, e isso não termina.
-  2. Embutir só o gráfico como *data URI* base64 (~59KB → ~80K caracteres)
-     não trava, mas confunde a rotina o suficiente para ela abandonar o HTML
-     formatado e mandar texto puro resumido em vez do relatório completo.
-  A solução foi tornar o repositório público e o `.html` referenciar o
-  gráfico por URL (`raw.githubusercontent.com/.../saidas/grafico_ipca_AAAA_MM.png`)
-  — nada de binário passa pelo contexto do agente, só texto leve (poucos KB).
+  formatado (tabelas coloridas, texto justificado) para kleberpcastro@gmail.com.
   **Importante:** o sandbox dessa rotina tem egress de rede bloqueado para
   APIs externas (SGS, Olinda, SIDRA) — por isso ela só lê o que o GitHub
   Actions já commitou, nunca roda `orquestrador.py` nem chama essas APIs
   diretamente.
+
+### Por que o e-mail NÃO tem o gráfico embutido (decisão deliberada)
+Três mecanismos foram testados na prática, nesta ordem, todos malsucedidos —
+**não tente de novo sem reler isto primeiro**:
+1. **`<img src="URL">`** (mesmo com URL pública, raw.githubusercontent.com) —
+   a ferramenta de e-mail (`mcp__Gmail__send_message`) remove qualquer tag
+   `<img>` com `src` externo antes de enviar. Confirmado lendo o e-mail
+   enviado direto pela API do Gmail: a tag simplesmente não estava no
+   `htmlBody` armazenado. Provável proteção contra pixel de rastreamento.
+2. **Data URI base64 solto dentro do texto do `htmlBody`** (~59KB →
+   ~80K caracteres) — não travou, mas confundiu a rotina o suficiente para
+   ela abandonar o HTML formatado e mandar um e-mail em texto puro resumido
+   em vez do relatório completo.
+3. **Anexo inline via Content-ID** (campo estruturado `attachments` da
+   ferramenta, com `inline: true` e `filename` casando com um `cid:` no
+   HTML — o jeito "correto"/padrão MIME para imagem embutida em e-mail) —
+   travou de verdade: a rotina fica presa indefinidamente (`worker_status`
+   continua "running" sem nenhum evento novo por 10-20+ minutos) tentando
+   gerar os ~80K caracteres de base64 como argumento de uma única chamada de
+   ferramenta. Mesmo split em pedaços de 20KB lidos um a um (que funciona
+   bem para *ler*), o agente trava tentando *reproduzir* esse volume de
+   texto na chamada final — é um limite de geração de output do modelo, não
+   de leitura, e por isso não tem workaround de chunking.
+Conclusão: **qualquer mecanismo que exija ~80KB+ de texto num único
+argumento de tool call trava ou corrompe o comportamento da rotina neste
+ambiente**, independente do campo (`htmlBody`, `attachments[].content`) ou
+de como o conteúdo foi construído do lado do sandbox. `gerar_html()` em
+`relatorio.py` não inclui `<img>` nenhuma; o link "Baixar o PDF completo" no
+rodapé é o caminho para ver o gráfico.

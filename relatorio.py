@@ -215,16 +215,15 @@ def gerar_html(resultado):
     Versão em HTML do relatório, para o corpo de e-mails — visual parecido
     com o PDF (tabelas de KPI coloridas, gráfico, texto justificado).
 
-    O gráfico é referenciado como `cid:grafico.png` — o padrão de e-mail para
-    imagem embutida via anexo inline (Content-ID), não por `<img src="URL">`.
-    Testado e confirmado: a ferramenta de e-mail remove qualquer tag `<img>`
-    com `src` apontando para uma URL externa antes de enviar (provavelmente
-    proteção contra pixel de rastreamento) — nem uma URL pública funciona.
-    Só o mecanismo de anexo inline de verdade (campo `attachments`, com
-    `inline: true` e `filename` casando com o `cid:` usado aqui) resulta na
-    imagem aparecendo. Quem gera o e-mail (a rotina agendada) precisa anexar
-    `saidas/grafico_ipca_AAAA_MM.png` como esse anexo inline — ver CLAUDE.md,
-    seção Automação, para o histórico completo dessa investigação.
+    SEM o gráfico embutido — decisão deliberada após três tentativas reais
+    de fazer a imagem aparecer no corpo do e-mail, todas malsucedidas:
+    `<img src="URL">` (a ferramenta de e-mail remove qualquer `<img>` com
+    `src` externo antes de enviar, mesmo URL pública — proteção contra pixel
+    de rastreamento), base64 solto no texto do htmlBody (confundia a rotina)
+    e anexo inline via Content-ID (`attachments` com `inline: true` — trava
+    a rotina tentando gerar os ~80KB de base64 como argumento da chamada).
+    Ver CLAUDE.md, seção Automação, para o histórico completo. O link
+    "Baixar o PDF completo" no rodapé é o caminho para ver o gráfico.
 
     Cor de fundo das células via `background-color` + atributo `bgcolor`
     (não `background` sozinho — o Gmail costuma descartar essa propriedade
@@ -237,7 +236,6 @@ def gerar_html(resultado):
     ref = resultado["referencia"]
     caminho = config.OUTPUT_DIR / f"relatorio_ipca_{ref:%Y_%m}.html"
 
-    grafico_src = "cid:grafico.png"
     pdf_url = f"{config.GITHUB_REPO_URL}/blob/main/saidas/relatorio_ipca_{ref:%Y_%m}.pdf"
 
     azul, azul_claro = "#1f4e79", "#eef2f7"
@@ -284,8 +282,6 @@ def gerar_html(resultado):
   {kpis2}
 
   <p style="line-height:1.55;font-size:14px;margin:16px 0;text-align:justify;">{_comentario(resultado)}</p>
-
-  <img src="{grafico_src}" alt="Gráficos do IPCA" width="600" style="max-width:100%;height:auto;display:block;border:1px solid #dddddd;border-radius:4px;margin:8px 0 16px 0;" />
 
   <h2 style="color:{azul};font-size:15px;margin:16px 0 6px 0;">Movimentos do mês</h2>
   <p style="line-height:1.55;font-size:14px;margin:0 0 16px 0;text-align:justify;">{_movimentos(resultado)}</p>
