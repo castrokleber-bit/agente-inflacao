@@ -290,8 +290,7 @@ def gerar_html(resultado):
 
   <p style="line-height:1.55;font-size:14px;margin:16px 0;text-align:justify;">{_comentario(resultado)}</p>
 
-  <img src="{grafico_src}" alt="Gráficos do IPCA" width="600" style="max-width:100%;height:auto;
-       display:block;border:1px solid #dddddd;border-radius:4px;margin:8px 0 16px 0;" />
+  <img src="{grafico_src}" alt="Gráficos do IPCA" width="600" style="max-width:100%;height:auto;display:block;border:1px solid #dddddd;border-radius:4px;margin:8px 0 16px 0;" />
 
   <h2 style="color:{azul};font-size:15px;margin:16px 0 6px 0;">Movimentos do mês</h2>
   <p style="line-height:1.55;font-size:14px;margin:0 0 16px 0;text-align:justify;">{_movimentos(resultado)}</p>
