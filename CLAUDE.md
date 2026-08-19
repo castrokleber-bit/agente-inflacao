@@ -94,12 +94,19 @@ este PC. Dois componentes:
 - **`.github/workflows/pipeline.yml`** — roda todo dia às 9h01 BRT entre os
   dias 5 e 13 de cada mês (a data de divulgação do IPCA não segue um cron
   fixo). `verificar_divulgacao_ipca.py` confere o calendário oficial do IBGE
-  a cada execução; só roda o pipeline de fato e commita o PDF em `saidas/`
-  (normalmente no `.gitignore` — forçado aqui de propósito) nos dias reais.
+  a cada execução; só roda o pipeline de fato e commita o PDF **e o `.txt`**
+  em `saidas/` (normalmente no `.gitignore` — forçado aqui de propósito) nos
+  dias reais.
 - **Rotina agendada Claude** (`trig_01CKj4ztEkkZ9Tbp71xGqDQ1`, gerenciável em
   claude.ai/code/routines) — roda ~19min depois (12:20 UTC), detecta se há
-  commit em `saidas/` datado de hoje e, se houver, envia o PDF por e-mail
-  (Gmail conectado) para kleberpcastro@gmail.com. **Importante:** o sandbox
-  dessa rotina tem egress de rede bloqueado para APIs externas (SGS, Olinda,
-  SIDRA) — por isso ela só lê o que o GitHub Actions já commitou, nunca roda
-  `orquestrador.py` nem chama essas APIs diretamente.
+  commit em `saidas/` datado de hoje e, se houver, lê o `.txt` e cola o
+  conteúdo direto no **corpo** do e-mail (Gmail conectado) para
+  kleberpcastro@gmail.com, com um link para o PDF no fim. **Não anexa o PDF**
+  — testado e comprovado que travava: montar um anexo binário de ~75KB em
+  base64 (~100K caracteres) dentro do contexto do agente, célula por célula,
+  para passar como argumento de uma chamada de ferramenta, é lento/trava a
+  ferramenta de e-mail conectada neste ambiente. O `.txt` (poucos KB) resolve
+  isso por completo. **Importante:** o sandbox dessa rotina tem egress de
+  rede bloqueado para APIs externas (SGS, Olinda, SIDRA) — por isso ela só
+  lê o que o GitHub Actions já commitou, nunca roda `orquestrador.py` nem
+  chama essas APIs diretamente.
