@@ -10,7 +10,6 @@ Só usa bibliotecas pip-instaláveis (matplotlib, reportlab) — nada preso a
 um ambiente específico, então roda igual no seu notebook e no servidor.
 """
 
-import base64
 import logging
 from datetime import datetime
 
@@ -216,14 +215,18 @@ def gerar_html(resultado):
     Versão em HTML do relatório, para o corpo de e-mails — visual parecido
     com o PDF (tabelas de KPI coloridas, gráfico, texto justificado).
 
-    Duas escolhas específicas de e-mail HTML (repositório é privado, então
-    uma URL de imagem hospedada lá não é acessível de fora):
-    - Cor de fundo das células via `background-color` + atributo `bgcolor`
-      (não `background` sozinho — o Gmail costuma descartar essa propriedade
-      shorthand, o que deixava o texto branco do cabeçalho invisível sobre
-      fundo branco).
-    - Gráfico embutido como data URI (base64), não por URL — evita expor o
-      repositório publicamente só para a imagem carregar.
+    O gráfico é referenciado por URL do GitHub (raw.githubusercontent.com),
+    não embutido em base64: o repositório é público, então a URL carrega
+    sozinha para quem recebe o e-mail. Testado e descartado embutir a imagem
+    como data URI (base64) — mesmo só ~59KB, isso já confundia a rotina
+    agendada o suficiente para ela desistir do HTML formatado e mandar um
+    e-mail em texto puro resumido em vez do relatório completo (ver
+    CLAUDE.md, seção Automação, para o histórico dessa investigação).
+
+    Cor de fundo das células via `background-color` + atributo `bgcolor`
+    (não `background` sozinho — o Gmail costuma descartar essa propriedade
+    shorthand, o que deixava o texto branco do cabeçalho invisível sobre
+    fundo branco).
 
     Grava em `saidas/relatorio_ipca_AAAA_MM.html`.
     """
@@ -231,9 +234,10 @@ def gerar_html(resultado):
     ref = resultado["referencia"]
     caminho = config.OUTPUT_DIR / f"relatorio_ipca_{ref:%Y_%m}.html"
 
-    grafico_path = _grafico(resultado)
-    grafico_b64 = base64.b64encode(grafico_path.read_bytes()).decode("ascii")
-    grafico_src = f"data:image/png;base64,{grafico_b64}"
+    grafico_src = (
+        f"{config.GITHUB_REPO_URL.replace('https://github.com/', 'https://raw.githubusercontent.com/')}"
+        f"/main/saidas/grafico_ipca_{ref:%Y_%m}.png"
+    )
     pdf_url = f"{config.GITHUB_REPO_URL}/blob/main/saidas/relatorio_ipca_{ref:%Y_%m}.pdf"
 
     azul, azul_claro = "#1f4e79", "#eef2f7"
