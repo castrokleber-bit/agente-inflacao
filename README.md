@@ -34,7 +34,11 @@ Três níveis, do mais simples ao mais robusto:
 1. **Agendador local** — `cron` (Linux/Mac) ou Agendador de Tarefas (Windows)
    chamando `python orquestrador.py`.
 2. **GitHub Actions** — já incluso em `.github/workflows/pipeline.yml`: roda
-   na nuvem toda manhã e guarda o PDF, sem servidor seu.
+   na nuvem todo dia entre os dias 5 e 13 de cada mês (janela em que o IBGE
+   costuma divulgar o IPCA), mas só executa o pipeline de fato e commita o
+   PDF em `saidas/` no dia real de divulgação — confirmado a cada execução
+   contra o calendário oficial do IBGE (`verificar_divulgacao_ipca.py`), já
+   que a data varia mês a mês e não segue um padrão fixo de cron.
 3. **Contêiner** — empacote com Docker e rode em qualquer VM/serviço.
 
 ## Conectar o Claude ao banco (MCP)
