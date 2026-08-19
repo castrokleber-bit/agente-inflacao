@@ -29,8 +29,9 @@ import db
 log = logging.getLogger("ibge")
 
 
-def _consultar_sidra(codigos):
+def _consultar_sidra(codigos, tabela):
     url = config.IBGE_SIDRA_BASE_URL.format(
+        tabela=tabela,
         variaveis=config.IBGE_SIDRA_VARIAVEIS,
         codigos=",".join(str(c) for c in codigos),
     )
@@ -50,18 +51,21 @@ def _consultar_sidra(codigos):
     raise RuntimeError(f"Falha ao consultar SIDRA em {url}. Último erro: {ultimo_erro}")
 
 
-def coletar(offline=False):
+def coletar(offline=False, indice="ipca"):
     """
     Coleta variação mensal, peso mensal e variação em 12 meses dos grupos e
-    subgrupos do IPCA (mês mais recente disponível) e grava em `ipca_grupos`.
+    subgrupos do IPCA (ou IPCA-15, indice="ipca15") no mês mais recente
+    disponível e grava em `ipca_grupos`. As duas tabelas SIDRA (7060/7062)
+    reaproveitam os mesmos códigos de classificação — ver config.IBGE_GRUPOS.
     """
     db.inicializar()
+    tabela = config.IBGE_SIDRA_TABELA[indice]
     catalogo = {**config.IBGE_GRUPOS, **config.IBGE_SUBGRUPOS}
 
     if offline:
         linhas = _dados_sinteticos(catalogo)
     else:
-        valores = _consultar_sidra(list(catalogo.keys()))
+        valores = _consultar_sidra(list(catalogo.keys()), tabela)
         por_codigo = {}
         mes_ref = None
         for item in valores:
@@ -92,11 +96,11 @@ def coletar(offline=False):
             ))
 
     if linhas:
-        db.salvar_ipca_grupos(linhas)
-        log.info("IBGE/SIDRA: %d grupos/subgrupos gravados (mês %s).",
-                  len(linhas), linhas[0][0])
+        db.salvar_ipca_grupos(linhas, indice=indice)
+        log.info("IBGE/SIDRA (tabela %s, índice %s): %d grupos/subgrupos gravados (mês %s).",
+                  tabela, indice, len(linhas), linhas[0][0])
     else:
-        log.warning("IBGE/SIDRA: nenhum dado retornado nesta coleta.")
+        log.warning("IBGE/SIDRA (tabela %s): nenhum dado retornado nesta coleta.", tabela)
     return linhas
 
 

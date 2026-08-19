@@ -52,15 +52,15 @@ def media_nucleos_12m():
     return pd.concat(series_12m, axis=1).mean(axis=1)
 
 
-def movimentos_ibge():
+def movimentos_ibge(indice="ipca"):
     """
     Contribuição em pontos percentuais (peso/100 * variação) de cada grupo
-    do IPCA no mês mais recente coletado do IBGE/SIDRA — quem de fato
-    "puxou" o índice, e não apenas quem teve a maior variação bruta. Para
-    cada grupo destacado, também aponta o subgrupo de maior contribuição
-    (em módulo) dentro dele.
+    do IPCA (ou IPCA-15, indice="ipca15") no mês mais recente coletado do
+    IBGE/SIDRA — quem de fato "puxou" o índice, e não apenas quem teve a
+    maior variação bruta. Para cada grupo destacado, também aponta o
+    subgrupo de maior contribuição (em módulo) dentro dele.
     """
-    linhas = db.ipca_grupos_mes_mais_recente()
+    linhas = db.ipca_grupos_mes_mais_recente(indice=indice)
     grupos, subgrupos_por_grupo = [], {}
     for _mes, nivel, _codigo, grupo_numero, nome, var, peso, var_12m in linhas:
         if var is None or peso is None:
@@ -125,6 +125,7 @@ def calcular_ipca():
     ultimo_mes = mensal.index.max()
 
     r = {
+        "indice": "ipca",
         "referencia": ultimo_mes,
         "no_mes": float(mensal.iloc[-1]),
         "no_ano": float(_acumulado_composto(no_ano).iloc[-1]) if len(no_ano) else float("nan"),
@@ -145,10 +146,47 @@ def calcular_ipca():
     # Peso e contribuição por grupo do IPCA (IBGE/SIDRA) — quem puxou o
     # índice no mês, e o grupo de maior peso na cesta (para contextualizar
     # ao lado de serviços no comentário).
-    r.update(movimentos_ibge())
+    r.update(movimentos_ibge(indice="ipca"))
 
     # Projeção = mediana do Focus para o ano corrente (fonte auditável).
-    proj = focus.projecao_ano_corrente()
+    proj = focus.projecao_ano_corrente(indicador=config.FOCUS_INDICADOR_POR_INDICE["ipca"])
+    r["focus_ano"], r["focus_mediana"], r["focus_data"] = (
+        proj if proj else (ano_atual, float("nan"), None)
+    )
+    return r
+
+
+def calcular_ipca15():
+    """
+    Mesma lógica de calcular_ipca(), mas para o IPCA-15 (prévia). O BC não
+    publica núcleos, quebra por durabilidade, monitorados nem difusão para
+    o IPCA-15 (ver config.py) — por isso o resultado tem só geral (mês/ano/
+    12m), grupos/subgrupos (IBGE/SIDRA tabela 7062) e Focus/"IPCA-15".
+    """
+    mensal = _serie_mensal("ipca15_geral")
+
+    ano_atual = mensal.index.max().year
+    no_ano = mensal[mensal.index.year == ano_atual]
+    doze_m = _rolling_12m(mensal)
+    ultimo_mes = mensal.index.max()
+
+    r = {
+        "indice": "ipca15",
+        "referencia": ultimo_mes,
+        "no_mes": float(mensal.iloc[-1]),
+        "no_ano": float(_acumulado_composto(no_ano).iloc[-1]) if len(no_ano) else float("nan"),
+        "em_12m": float(doze_m.iloc[-1]) if len(doze_m) else float("nan"),
+        "meta": config.META_INFLACAO,
+        "banda": config.META_TOLERANCIA,
+        "serie_mensal": mensal,
+        "serie_12m": doze_m,
+    }
+    r["desvio_meta"] = r["em_12m"] - config.META_INFLACAO
+    r["dentro_banda"] = abs(r["desvio_meta"]) <= config.META_TOLERANCIA
+
+    r.update(movimentos_ibge(indice="ipca15"))
+
+    proj = focus.projecao_ano_corrente(indicador=config.FOCUS_INDICADOR_POR_INDICE["ipca15"])
     r["focus_ano"], r["focus_mediana"], r["focus_data"] = (
         proj if proj else (ano_atual, float("nan"), None)
     )
@@ -156,20 +194,22 @@ def calcular_ipca():
 
 
 def persistir(r):
+    """Grava os indicadores calculados em `indicadores`, prefixados pelo
+    índice (r["indice"]: 'ipca' ou 'ipca15') para não colidir entre si."""
+    prefixo = r.get("indice", "ipca")
     ref = r["referencia"].strftime("%Y-%m-%d")
     linhas = [
-        ("ipca_no_mes", ref, r["no_mes"]),
-        ("ipca_no_ano", ref, r["no_ano"]),
-        ("ipca_12m", ref, r["em_12m"]),
-        ("ipca_mm3_anualizada", ref, r["mm3_anualizada"]),
-        ("ipca_servicos_12m", ref, r["servicos_12m"]),
-        ("ipca_nucleos_12m", ref, r["nucleos_12m"]),
-        ("ipca_difusao", ref, r["difusao"]),
-        ("ipca_desvio_meta", ref, r["desvio_meta"]),
-        ("focus_mediana_ano_corrente", ref, r["focus_mediana"]),
+        (f"{prefixo}_no_mes", ref, r["no_mes"]),
+        (f"{prefixo}_no_ano", ref, r["no_ano"]),
+        (f"{prefixo}_12m", ref, r["em_12m"]),
+        (f"{prefixo}_desvio_meta", ref, r["desvio_meta"]),
+        (f"focus_mediana_ano_corrente_{prefixo}", ref, r["focus_mediana"]),
     ]
+    for chave in ("mm3_anualizada", "servicos_12m", "nucleos_12m", "difusao"):
+        if chave in r:
+            linhas.append((f"{prefixo}_{chave}", ref, r[chave]))
     db.salvar_indicadores(linhas)
-    log.info("Indicadores persistidos (referência %s).", ref)
+    log.info("Indicadores (%s) persistidos (referência %s).", prefixo, ref)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,65 @@
+# Agendamento em "produção" sem servidor próprio — boletim do IPCA-15
+# (prévia da inflação). Réplica do pipeline.yml (IPCA cheio), mesma lógica
+# de "roda todo dia numa janela e deixa o calendário do IBGE decidir se vale
+# a pena", mas com sua PRÓPRIA janela de dias e SEM o conceito de 2ª edição
+# (não há núcleo de inflação no IPCA-15 — ver config.py e relatorio.py — logo
+# não existe o problema de "núcleo atrasado" que motiva a 2ª edição do IPCA
+# cheio; uma coleta por divulgação basta).
+#
+# Janela de dias (19 a 28) e produto do calendário do IBGE (9260 = "Índice
+# Nacional de Preços ao Consumidor Amplo 15") confirmados consultando
+# https://servicodados.ibge.gov.br/api/v3/calendario — datas de divulgação
+# do IPCA-15 caem tipicamente ao meio-dia (12:00 BRT); por isso o horário
+# abaixo (12h10 BRT) segue o mesmo padrão do IPCA cheio: roda 10 minutos
+# depois do horário usual de divulgação.
+name: monitor-inflacao-ipca15
+
+on:
+  schedule:
+    - cron: "10 15 19-28 * *"   # todo dia, do dia 19 ao 28, 12h10 BRT (15:10 UTC)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  executar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Checar se hoje é dia de divulgação do IPCA-15
+        id: divulgacao
+        run: python verificar_divulgacao_ipca.py --indice=ipca15
+        continue-on-error: true
+
+      - name: Rodar pipeline (IPCA-15)
+        if: steps.divulgacao.outcome == 'success'
+        run: python orquestrador.py --indice=ipca15
+
+      - name: Publicar relatório (artefato do run)
+        if: steps.divulgacao.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-ipca15
+          path: |
+            saidas/*.pdf
+            saidas/*.png
+            saidas/*.txt
+            saidas/*.html
+
+      - name: Commitar relatório no repositório
+        if: steps.divulgacao.outcome == 'success'
+        run: |
+          git config user.name "agente-inflacao-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f saidas/*.pdf saidas/*.png saidas/*.txt saidas/*.html
+          git commit -m "Relatório automático (IPCA-15): $(date -u +%Y-%m-%d)" || echo "Nada para commitar"
+          git push

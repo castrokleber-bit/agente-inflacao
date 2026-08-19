@@ -63,9 +63,16 @@ SERIES = {
 #   https://apisidra.ibge.gov.br/values/t/7060/n1/1/v/63,66,2265/p/last%201/
 #   c315/{códigos}?formato=json
 IBGE_SIDRA_BASE_URL = (
-    "https://apisidra.ibge.gov.br/values/t/7060/n1/1/v/{variaveis}/p/last%201/c315/{codigos}"
+    "https://apisidra.ibge.gov.br/values/t/{tabela}/n1/1/v/{variaveis}/p/last%201/c315/{codigos}"
 )
 IBGE_SIDRA_VARIAVEIS = "63,66,2265"  # variação mensal, peso mensal, variação 12 meses
+
+# Tabela SIDRA por índice — 7060 (IPCA) e 7062 (IPCA-15) usam exatamente a
+# mesma classificação c315 (grupo/subgrupo/item/subitem com os MESMOS
+# códigos: 7169 = índice geral, 7170 = grupo 1 etc. — confirmado nos
+# metadados de ambas as tabelas), então IBGE_GRUPOS/IBGE_SUBGRUPOS abaixo
+# servem para os dois índices sem duplicação.
+IBGE_SIDRA_TABELA = {"ipca": 7060, "ipca15": 7062}
 
 # Grupos (nível 1) do IPCA — código SIDRA: (grupo_numero, nome).
 IBGE_GRUPOS = {
@@ -130,6 +137,44 @@ NUCLEOS = ["ipca_nucleo_ms", "ipca_nucleo_ex0", "ipca_nucleo_dp",
 
 # Quantos anos de histórico buscar na primeira carga.
 HISTORICO_ANOS = 6
+
+# --- IPCA-15 (prévia da inflação) --------------------------------------------
+# INVESTIGAÇÃO (2026-08-19): o Portal de Dados Abertos do BC (catálogo do
+# SGS) não tem NENHUMA série com "IPCA-15"/"IPCA15" no título — busca
+# exaustiva com várias variantes de texto retornou zero resultados, e nem
+# os códigos SGS vizinhos ao candidato abaixo aparecem no catálogo. Ou seja,
+# o IPCA-15 não é indexado no localizador do SGS por nome. Ainda assim, o
+# código numérico 7478 EXISTE e responde na API bruta do SGS — validado
+# cruzando 3 meses (mai, jun, jul/2026: 0.62%, 0.41%, 0.06%) contra a
+# variável 355 (IPCA15 - Variação mensal) da tabela 7062 do SIDRA/IBGE para
+# o índice geral (código c315=7169) — os valores batem exatamente.
+SERIES_IPCA15 = {
+    "ipca15_geral": (7478, "IPCA-15 geral - variação mensal (%)"),
+}
+
+# O BC NÃO publica, para o IPCA-15: núcleos de inflação, quebra por
+# durabilidade (duráveis/semi/não-duráveis), preços monitorados nem índice
+# de difusão. Confirmado por duas vias: (1) a mesma busca exaustiva no
+# catálogo do SGS não encontrou nenhuma dessas aberturas com "15" no nome;
+# (2) a tabela 7062 do SIDRA (única fonte de peso/contribuição por grupo
+# para o IPCA-15, ver IBGE_SIDRA_TABELA acima) não tem essas categorias na
+# sua classificação c315 — só abre por grupo/subgrupo/item de despesa,
+# igual à 7060. Esses recortes são cálculos que o BC faz só para o IPCA
+# cheio, a partir de microdados do IBGE, e não são replicados para a
+# prévia. O boletim do IPCA-15 por isso omite essas seções e destaca a
+# ausência explicitamente (ver relatorio.py).
+
+# Indicador do Focus/Olinda por índice — confirmado que a Olinda também
+# publica expectativas para "IPCA-15" como indicador próprio (mesma
+# estrutura de ExpectativasMercadoAnuais usada para "IPCA").
+FOCUS_INDICADOR_POR_INDICE = {"ipca": "IPCA", "ipca15": "IPCA-15"}
+
+# Produto do calendário de divulgações do IBGE, por índice. 9256 = "Índice
+# Nacional de Preços ao Consumidor Amplo" (IPCA, dias ~5-13 do mês); 9260 =
+# "Índice Nacional de Preços ao Consumidor Amplo 15" (IPCA-15, dias ~19-28
+# do mês — janela bem distinta da do IPCA cheio). Confirmado consultando
+# https://servicodados.ibge.gov.br/api/v3/calendario e filtrando por nome.
+IBGE_CALENDARIO_PRODUTO = {"ipca": 9256, "ipca15": 9260}
 
 # --- Fonte 2: Olinda / Expectativas de Mercado (Focus) ----------------------
 # Projeção de IPCA = mediana das expectativas anuais do Focus (baseCalculo 0).

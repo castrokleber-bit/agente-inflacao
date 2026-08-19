@@ -31,13 +31,13 @@ import db
 log = logging.getLogger("focus")
 
 
-def _consultar_olinda(ano_ref):
-    """Consulta a mediana anual do IPCA para um ano de referência específico."""
+def _consultar_olinda(ano_ref, indicador):
+    """Consulta a mediana anual de um indicador (IPCA ou IPCA-15) para um ano de referência."""
     url = config.FOCUS_BASE_URL.format(recurso=config.FOCUS_RECURSO_ANUAL)
     params = {
         "$format": "json",
         "$filter": (
-            f"Indicador eq '{config.FOCUS_INDICADOR}' "
+            f"Indicador eq '{indicador}' "
             f"and DataReferencia eq '{ano_ref}' "
             f"and baseCalculo eq {config.FOCUS_BASE_CALCULO}"
         ),
@@ -60,41 +60,47 @@ def _consultar_olinda(ano_ref):
         except Exception as e:  # noqa: BLE001
             ultimo_erro = e
             espera = config.HTTP_BACKOFF * tentativa
-            log.warning("Focus %s falhou (tentativa %d/%d): %s — aguardando %.1fs",
-                        ano_ref, tentativa, config.HTTP_TENTATIVAS, e, espera)
+            log.warning("Focus %s/%s falhou (tentativa %d/%d): %s — aguardando %.1fs",
+                        indicador, ano_ref, tentativa, config.HTTP_TENTATIVAS, e, espera)
             time.sleep(espera)
     raise RuntimeError(
-        f"Falha ao consultar Focus (ano {ano_ref}) em {url}. Último erro: {ultimo_erro}"
+        f"Falha ao consultar Focus ({indicador}, ano {ano_ref}) em {url}. "
+        f"Último erro: {ultimo_erro}"
     )
 
 
-def coletar(offline=False):
-    """Coleta a mediana do Focus para o ano corrente e os seguintes."""
+def coletar(offline=False, indicador=None):
+    """Coleta a mediana do Focus para o ano corrente e os seguintes.
+
+    indicador: "IPCA" (padrão) ou "IPCA-15" — ver config.FOCUS_INDICADOR_POR_INDICE.
+    """
+    indicador = indicador or config.FOCUS_INDICADOR
     db.inicializar()
     ano0 = datetime.now().year
     anos = [ano0 + i for i in range(config.FOCUS_ANOS_PROJECAO)]
     registros = []
     for ano in anos:
-        item = _dado_sintetico_focus(ano) if offline else _consultar_olinda(ano)
+        item = _dado_sintetico_focus(ano, indicador) if offline else _consultar_olinda(ano, indicador)
         if not item:
-            log.warning("Focus sem dado para %s — pulando.", ano)
+            log.warning("Focus (%s) sem dado para %s — pulando.", indicador, ano)
             continue
         registros.append((
             item["Data"], int(item["DataReferencia"]),
             item.get("Mediana"), item.get("Media"),
             item.get("Minimo"), item.get("Maximo"),
         ))
-        log.info("Focus %s: mediana %.2f%% (divulgado em %s).",
-                 ano, item.get("Mediana", float("nan")), item["Data"])
+        log.info("Focus %s %s: mediana %.2f%% (divulgado em %s).",
+                 indicador, ano, item.get("Mediana", float("nan")), item["Data"])
     if registros:
-        db.salvar_focus(registros)
+        db.salvar_focus(registros, indicador=indicador)
     return registros
 
 
-def projecao_ano_corrente():
+def projecao_ano_corrente(indicador=None):
     """Retorna (ano, mediana, data_divulgacao) do Focus para o ano corrente, ou None."""
+    indicador = indicador or config.FOCUS_INDICADOR
     ano0 = datetime.now().year
-    for ano, mediana, data_coleta in db.focus_mais_recente():
+    for ano, mediana, data_coleta in db.focus_mais_recente(indicador=indicador):
         if ano == ano0:
             return ano, mediana, data_coleta
     return None
@@ -103,10 +109,10 @@ def projecao_ano_corrente():
 # ---------------------------------------------------------------------------
 # Fallback sintético — só para demonstração offline.
 # ---------------------------------------------------------------------------
-def _dado_sintetico_focus(ano):
+def _dado_sintetico_focus(ano, indicador="IPCA"):
     base = {0: 4.6, 1: 4.0, 2: 3.7}.get(ano - datetime.now().year, 3.5)
     return {
-        "Indicador": "IPCA", "Data": datetime.now().strftime("%Y-%m-%d"),
+        "Indicador": indicador, "Data": datetime.now().strftime("%Y-%m-%d"),
         "DataReferencia": str(ano), "Mediana": base, "Media": base + 0.05,
         "Minimo": base - 0.8, "Maximo": base + 0.9,
     }

@@ -22,6 +22,17 @@ que mais empurraram o índice para cima/baixo, por contribuição em pontos
 percentuais (peso × variação) — não a variação bruta — com o subgrupo mais
 relevante dentro de cada um.
 
+Dois boletins com o mesmo molde, selecionados por `orquestrador.py --indice=`:
+**IPCA** (`ipca`, padrão) e **IPCA-15** (`ipca15`, prévia da inflação). O
+IPCA-15 **não tem** núcleos, quebra por durabilidade, monitorados nem
+difusão — o BC só calcula essas aberturas para o índice cheio (ver
+"Pendência conhecida" abaixo) — então o boletim do IPCA-15 omite essas
+seções e destaca a ausência explicitamente no texto. O IPCA cheio sai em
+**duas edições** no dia de divulgação (`--edicao=1` e `--edicao=2`): os
+núcleos costumam ser publicados pelo BC um pouco depois do índice cheio, e a
+2ª edição roda mais tarde no mesmo dia para capturar o núcleo já atualizado.
+O número da edição aparece no `<h1>` do e-mail/HTML e no cabeçalho do PDF.
+
 ## Regras de trabalho (obedeça sempre)
 - **Fonte primária é o SGS do Banco Central.** Nunca invente números; se um
   dado não está no `dados/macro.db`, rode a coleta antes de responder.
@@ -61,27 +72,70 @@ relevante dentro de cada um.
   isso — se o recorte for necessário, colete via API SIDRA do IBGE. Ver
   comentário detalhado em `config.py` acima de `SERIES_A_CONFIRMAR`.
 
+## IPCA-15 (investigação, 2026-08-19)
+O IPCA-15 **não é indexado por nome** no catálogo do SGS/Portal de Dados
+Abertos do BC — busca exaustiva ("IPCA-15", "IPCA15", "amplo 15" etc.)
+retornou zero resultados. Mesmo assim o código numérico existe e responde
+na API bruta do SGS:
+- **7478** = IPCA-15 geral, variação mensal — validado cruzando 3 meses
+  contra a variável 355 (tabela 7062 do SIDRA/IBGE, código c315=7169 =
+  índice geral): os valores batem exatamente.
+- O BC **não publica** núcleos, quebra por durabilidade, monitorados nem
+  difusão para o IPCA-15 — confirmado por duas vias: nenhum desses cortes
+  aparece no catálogo do SGS com "15" no nome, e a classificação c315 da
+  tabela 7062 do SIDRA (única fonte de peso/contribuição por grupo do
+  IPCA-15) só abre por grupo/subgrupo/item de despesa, igual à 7060 —
+  sem categorias de núcleo/monitorados/difusão. São cálculos que o BC faz
+  só para o índice cheio a partir de microdados do IBGE.
+- **Focus/Olinda tracks "IPCA-15" como indicador próprio** — confirmado
+  consultando `ExpectativasMercadoAnuais` com `Indicador eq 'IPCA-15'`
+  (mesma estrutura usada para "IPCA").
+- **Calendário do IBGE:** produto_id **9260** ("Índice Nacional de Preços
+  ao Consumidor Amplo 15"), janela de divulgação **dias ~19-28** do mês —
+  bem diferente da janela do IPCA cheio (produto_id 9256, dias ~5-13).
+  Confirmado consultando `https://servicodados.ibge.gov.br/api/v3/calendario`
+  e filtrando por `nome_produto` (o campo NÃO contém a sigla "IPCA" — é o
+  nome por extenso).
+Não invente nenhum código/série do IPCA-15 além do que está documentado
+aqui e em `config.py` — se precisar de um recorte que o BC não publica,
+a única fonte real é a tabela 7062 do SIDRA (grupo/subgrupo), não o SGS.
+
 ## Comandos úteis
-- `python orquestrador.py` — pipeline completo (produção).
+- `python orquestrador.py` — pipeline completo (produção), IPCA, 1ª edição.
 - `python orquestrador.py --offline` — demonstração sem internet.
-- `python modelagem.py` — recalcula e imprime os números-chave.
+- `python orquestrador.py --indice=ipca15` — boletim do IPCA-15 (sem núcleo).
+- `python orquestrador.py --edicao=2` — 2ª edição do dia (só afeta o IPCA
+  cheio: título do e-mail/HTML e cabeçalho do PDF; IPCA-15 ignora).
+- `python modelagem.py` — recalcula e imprime os números-chave (IPCA).
 - Cada robô roda isolado (não há suíte de testes; o bloco `if __name__` de
   cada arquivo é o smoke test): `python coleta.py --offline`,
   `python focus.py --offline`, `python ibge.py --offline`,
   `python tratamento.py`, `python relatorio.py`.
 - `python verificar_divulgacao_ipca.py` — sai com código 0 se hoje é dia
   oficial de divulgação do IPCA (consulta o calendário do IBGE), senão 1.
+  `--indice=ipca15` checa a janela/produto do IPCA-15.
 
 ## Banco de dados (para consultas via MCP)
 Arquivo: `dados/macro.db`
-- `observacoes(serie, data, valor)` — dados brutos, formato longo.
-- `indicadores(nome, data, valor)` — indicadores já calculados.
+- `observacoes(serie, data, valor)` — dados brutos, formato longo. IPCA-15
+  usa nomes de série próprios (`ipca15_geral`), sem colidir com o IPCA cheio.
+- `indicadores(nome, data, valor)` — indicadores já calculados, prefixados
+  por índice (`ipca_no_mes`, `ipca15_no_mes` etc. — ver `modelagem.persistir`).
 - `series_meta(serie, codigo_sgs, descricao, atualizado_em)` — catálogo.
-- `focus_ipca(data_coleta, ano_referencia, mediana, media, minimo, maximo)` —
-  expectativas do Focus por ano de referência e data de divulgação.
-- `ipca_grupos(mes, nivel, codigo_sidra, grupo_numero, nome, variacao_mensal,
-  peso_mensal, variacao_12m)` — peso e variação por grupo/subgrupo do IPCA
-  (IBGE/SIDRA), só o mês mais recente coletado (fotografia, não série).
+- `focus_ipca(indicador, data_coleta, ano_referencia, mediana, media, minimo,
+  maximo)` — expectativas do Focus por indicador ("IPCA"/"IPCA-15"), ano de
+  referência e data de divulgação. PK inclui `indicador` — os dois índices
+  coexistem sem se sobrescrever.
+- `ipca_grupos(indice, mes, nivel, codigo_sidra, grupo_numero, nome,
+  variacao_mensal, peso_mensal, variacao_12m)` — peso e variação por
+  grupo/subgrupo, só o mês mais recente coletado por índice (fotografia, não
+  série). `indice` ('ipca'/'ipca15') é necessário porque as tabelas SIDRA
+  7060 e 7062 reaproveitam os MESMOS códigos de classificação — sem essa
+  coluna uma coleta sobrescreveria a outra.
+
+Bancos criados antes dessa distinção IPCA/IPCA-15 são migrados
+automaticamente em `db.inicializar()` (recria `focus_ipca`/`ipca_grupos` com
+as colunas novas, preservando os dados como 'IPCA'/'ipca').
 
 Ao responder perguntas sobre os dados, **escreva SQL contra estas tabelas**
 em vez de recalcular na memória.
@@ -90,23 +144,48 @@ em vez de recalcular na memória.
 Desde 2026-08-19 o projeto vive em
 [github.com/castrokleber-bit/agente-inflacao](https://github.com/castrokleber-bit/agente-inflacao)
 (branch `main`, repositório público) — necessário porque o agendamento roda
-na nuvem, sem acesso a este PC. Dois componentes:
-- **`.github/workflows/pipeline.yml`** — roda todo dia às 9h01 BRT entre os
-  dias 5 e 13 de cada mês (a data de divulgação do IPCA não segue um cron
-  fixo). `verificar_divulgacao_ipca.py` confere o calendário oficial do IBGE
-  a cada execução; só roda o pipeline de fato e commita PDF, PNG, `.txt` e
-  `.html` em `saidas/` (normalmente no `.gitignore` — forçado aqui de
-  propósito) nos dias reais.
-- **Rotina agendada Claude** (`trig_01CKj4ztEkkZ9Tbp71xGqDQ1`, gerenciável em
-  claude.ai/code/routines) — roda ~19min depois (12:20 UTC), detecta se há
-  commit em `saidas/` datado de hoje e, se houver, lê o `.html` e usa o
-  parâmetro `htmlBody` da ferramenta de Gmail conectada (com fallback para o
-  `.txt` puro se a ferramenta não suportasse HTML) para enviar o relatório
-  formatado (tabelas coloridas, texto justificado) para kleberpcastro@gmail.com.
-  **Importante:** o sandbox dessa rotina tem egress de rede bloqueado para
-  APIs externas (SGS, Olinda, SIDRA) — por isso ela só lê o que o GitHub
-  Actions já commitou, nunca roda `orquestrador.py` nem chama essas APIs
-  diretamente.
+na nuvem, sem acesso a este PC. Dois workflows do GitHub Actions + três
+rotinas agendadas do Claude (uma por e-mail a enviar):
+
+**`.github/workflows/pipeline.yml`** (IPCA cheio) — roda em DOIS horários,
+todo dia entre os dias 5 e 13 do mês (a data de divulgação não segue um cron
+fixo; `verificar_divulgacao_ipca.py` confere o calendário oficial do IBGE a
+cada execução e só segue adiante nos dias reais):
+- **9h10 BRT (12:10 UTC) → `--edicao=1`.**
+- **12h00 BRT (15:00 UTC) → `--edicao=2`** (roda a coleta de novo; o núcleo
+  de inflação costuma ser publicado pelo BC um pouco depois do índice cheio,
+  então esta 2ª rodada tende a capturar o número atualizado). `github.event.
+  schedule` no workflow decide qual `--edicao` passar.
+Cada rodada **sobrescreve os MESMOS arquivos** (`relatorio_ipca_AAAA_MM.*`) —
+não há sufixo de edição no nome; o número da edição fica só no `<h1>`/título
+do arquivo. Isso é proposital: o conteúdo mais completo (com núcleo
+atualizado) deve prevalecer para aquele mês, inclusive no link do PDF que já
+foi mandado por e-mail na 1ª edição.
+
+**`.github/workflows/pipeline_ipca15.yml`** (IPCA-15) — mesma lógica, janela
+e produto do calendário DIFERENTES (dias 19-28, produto_id 9260 — ver seção
+"IPCA-15" acima), roda uma vez só às 12h10 BRT (15:10 UTC) → `python
+orquestrador.py --indice=ipca15` (edição única, sem o conceito de núcleo
+atrasado). Arquivos gerados com prefixo `ipca15` (`relatorio_ipca15_*`,
+`grafico_ipca15_*`), sem colidir com os do IPCA cheio.
+
+**Três rotinas agendadas do Claude** (claude.ai/code/routines), cada uma
+lendo o `.html` correspondente já commitado pelo GitHub Actions e enviando
+por `mcp__Gmail__send_message` (`htmlBody`, com fallback para `.txt`) para
+kleberpcastro@gmail.com — **sem** rodar `orquestrador.py` nem chamar SGS/
+Olinda/SIDRA diretamente (o sandbox dessas rotinas tem egress de rede
+bloqueado para essas APIs; elas só leem o que o GitHub Actions já commitou):
+- `trig_01CKj4ztEkkZ9Tbp71xGqDQ1` — **"1ª edição"**, roda 12:25 UTC (9h25
+  BRT), lê `relatorio_ipca_AAAA_MM.html`.
+- `trig_01GtLbFED522hoz12jfdUeXn` — **"2ª edição"**, roda 15:20 UTC (12h20
+  BRT), lê o MESMO arquivo (já sobrescrito) — mas só envia se o `<h1>`
+  dentro do arquivo já disser "2ª edição" (evita reenviar/duplicar a 1ª
+  edição caso a rodada das 12h ainda não tenha commitado).
+- `trig_01XZzPFeLPERg84KuCouoci7` — **"IPCA-15"**, roda 15:30 UTC (12h30
+  BRT), lê `relatorio_ipca15_AAAA_MM.html`.
+Em todos os casos o **assunto do e-mail é derivado do `<h1>` literal do
+arquivo** (nunca hardcoded na rotina) — é o `<h1>` de `relatorio.py` que
+carrega o rótulo do índice e o número da edição corretos.
 
 ### Por que o e-mail NÃO tem o gráfico embutido (decisão deliberada)
 Três mecanismos foram testados na prática, nesta ordem, todos malsucedidos —

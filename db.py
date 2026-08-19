@@ -62,22 +62,29 @@ def inicializar():
             );
 
             -- Expectativas do Focus (Olinda). Guardamos a mediana por ano de
-            -- referência e a data da coleta, para acompanhar a revisão da projeção.
+            -- referência e a data da coleta, para acompanhar a revisão da
+            -- projeção. `indicador` distingue IPCA de IPCA-15 (a Olinda
+            -- publica os dois como indicadores independentes).
             CREATE TABLE IF NOT EXISTS focus_ipca (
+                indicador      TEXT NOT NULL DEFAULT 'IPCA',
                 data_coleta    TEXT NOT NULL,   -- quando o Focus foi divulgado
                 ano_referencia INTEGER NOT NULL,
                 mediana        REAL,
                 media          REAL,
                 minimo         REAL,
                 maximo         REAL,
-                PRIMARY KEY (data_coleta, ano_referencia)
+                PRIMARY KEY (indicador, data_coleta, ano_referencia)
             );
 
             -- Peso e variação por grupo/subgrupo do IPCA (IBGE/SIDRA). O SGS
             -- do BC não publica peso — só o IBGE, que calcula o índice, tem
             -- essa informação. Guardamos só o mês mais recente coletado
-            -- (é uma fotografia, não uma série histórica).
+            -- (é uma fotografia, não uma série histórica). `indice` distingue
+            -- 'ipca' (tabela SIDRA 7060) de 'ipca15' (tabela 7062) — os dois
+            -- reaproveitam os MESMOS códigos de classificação SIDRA (c315),
+            -- então sem essa coluna uma coleta sobrescreveria a outra.
             CREATE TABLE IF NOT EXISTS ipca_grupos (
+                indice          TEXT NOT NULL DEFAULT 'ipca',
                 mes             TEXT NOT NULL,  -- referência, AAAA-MM-DD
                 nivel           TEXT NOT NULL,  -- 'grupo' ou 'subgrupo'
                 codigo_sidra    INTEGER NOT NULL,
@@ -86,8 +93,68 @@ def inicializar():
                 variacao_mensal REAL,
                 peso_mensal     REAL,
                 variacao_12m    REAL,
-                PRIMARY KEY (mes, codigo_sidra)
+                PRIMARY KEY (indice, mes, codigo_sidra)
             );
+            """
+        )
+        _migrar_schema_legado(con)
+
+
+def _migrar_schema_legado(con):
+    """
+    Bancos criados antes da distinção IPCA / IPCA-15 têm `focus_ipca` e
+    `ipca_grupos` sem as colunas `indicador`/`indice` (e com PRIMARY KEY
+    mais curta). SQLite não altera PK com ALTER TABLE, então recriamos a
+    tabela quando a coluna nova não existe, preservando os dados como
+    'IPCA'/'ipca' (o único índice que existia antes desta migração).
+    """
+    cols_focus = [r[1] for r in con.execute("PRAGMA table_info(focus_ipca)")]
+    if cols_focus and "indicador" not in cols_focus:
+        con.executescript(
+            """
+            ALTER TABLE focus_ipca RENAME TO focus_ipca_legado;
+            CREATE TABLE focus_ipca (
+                indicador      TEXT NOT NULL DEFAULT 'IPCA',
+                data_coleta    TEXT NOT NULL,
+                ano_referencia INTEGER NOT NULL,
+                mediana        REAL,
+                media          REAL,
+                minimo         REAL,
+                maximo         REAL,
+                PRIMARY KEY (indicador, data_coleta, ano_referencia)
+            );
+            INSERT INTO focus_ipca
+                (indicador, data_coleta, ano_referencia, mediana, media, minimo, maximo)
+            SELECT 'IPCA', data_coleta, ano_referencia, mediana, media, minimo, maximo
+                FROM focus_ipca_legado;
+            DROP TABLE focus_ipca_legado;
+            """
+        )
+
+    cols_grupos = [r[1] for r in con.execute("PRAGMA table_info(ipca_grupos)")]
+    if cols_grupos and "indice" not in cols_grupos:
+        con.executescript(
+            """
+            ALTER TABLE ipca_grupos RENAME TO ipca_grupos_legado;
+            CREATE TABLE ipca_grupos (
+                indice          TEXT NOT NULL DEFAULT 'ipca',
+                mes             TEXT NOT NULL,
+                nivel           TEXT NOT NULL,
+                codigo_sidra    INTEGER NOT NULL,
+                grupo_numero    INTEGER NOT NULL,
+                nome            TEXT NOT NULL,
+                variacao_mensal REAL,
+                peso_mensal     REAL,
+                variacao_12m    REAL,
+                PRIMARY KEY (indice, mes, codigo_sidra)
+            );
+            INSERT INTO ipca_grupos
+                (indice, mes, nivel, codigo_sidra, grupo_numero, nome,
+                 variacao_mensal, peso_mensal, variacao_12m)
+            SELECT 'ipca', mes, nivel, codigo_sidra, grupo_numero, nome,
+                   variacao_mensal, peso_mensal, variacao_12m
+                FROM ipca_grupos_legado;
+            DROP TABLE ipca_grupos_legado;
             """
         )
 
@@ -128,58 +195,62 @@ def salvar_indicadores(registros):
         )
 
 
-def salvar_focus(registros):
+def salvar_focus(registros, indicador="IPCA"):
     """registros: iterável de (data_coleta, ano_ref, mediana, media, minimo, maximo)."""
     with conectar() as con:
         con.executemany(
             """INSERT INTO focus_ipca
-                 (data_coleta, ano_referencia, mediana, media, minimo, maximo)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(data_coleta, ano_referencia) DO UPDATE SET
+                 (indicador, data_coleta, ano_referencia, mediana, media, minimo, maximo)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(indicador, data_coleta, ano_referencia) DO UPDATE SET
                  mediana=excluded.mediana, media=excluded.media,
                  minimo=excluded.minimo, maximo=excluded.maximo;""",
-            list(registros),
+            [(indicador, *linha) for linha in registros],
         )
 
 
-def salvar_ipca_grupos(registros):
+def salvar_ipca_grupos(registros, indice="ipca"):
     """registros: iterável de (mes, nivel, codigo_sidra, grupo_numero, nome,
     variacao_mensal, peso_mensal, variacao_12m)."""
     with conectar() as con:
         con.executemany(
             """INSERT INTO ipca_grupos
-                 (mes, nivel, codigo_sidra, grupo_numero, nome,
+                 (indice, mes, nivel, codigo_sidra, grupo_numero, nome,
                   variacao_mensal, peso_mensal, variacao_12m)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(mes, codigo_sidra) DO UPDATE SET
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(indice, mes, codigo_sidra) DO UPDATE SET
                  nivel=excluded.nivel, grupo_numero=excluded.grupo_numero,
                  nome=excluded.nome, variacao_mensal=excluded.variacao_mensal,
                  peso_mensal=excluded.peso_mensal, variacao_12m=excluded.variacao_12m;""",
-            list(registros),
+            [(indice, *linha) for linha in registros],
         )
 
 
-def ipca_grupos_mes_mais_recente():
-    """Todas as linhas (grupo + subgrupo) do mês mais recente coletado."""
+def ipca_grupos_mes_mais_recente(indice="ipca"):
+    """Todas as linhas (grupo + subgrupo) do mês mais recente coletado para o índice dado."""
     with conectar() as con:
         cur = con.execute(
             """SELECT mes, nivel, codigo_sidra, grupo_numero, nome,
                       variacao_mensal, peso_mensal, variacao_12m
                FROM ipca_grupos
-               WHERE mes = (SELECT MAX(mes) FROM ipca_grupos)
-               ORDER BY nivel, grupo_numero, codigo_sidra;"""
+               WHERE indice = ?
+                 AND mes = (SELECT MAX(mes) FROM ipca_grupos WHERE indice = ?)
+               ORDER BY nivel, grupo_numero, codigo_sidra;""",
+            (indice, indice),
         )
         return cur.fetchall()
 
 
-def focus_mais_recente():
+def focus_mais_recente(indicador="IPCA"):
     """(ano_referencia, mediana, data_coleta) da coleta mais recente disponível."""
     with conectar() as con:
         cur = con.execute(
             """SELECT ano_referencia, mediana, data_coleta
                FROM focus_ipca
-               WHERE data_coleta = (SELECT MAX(data_coleta) FROM focus_ipca)
-               ORDER BY ano_referencia;"""
+               WHERE indicador = ?
+                 AND data_coleta = (SELECT MAX(data_coleta) FROM focus_ipca WHERE indicador = ?)
+               ORDER BY ano_referencia;""",
+            (indicador, indicador),
         )
         return cur.fetchall()
 

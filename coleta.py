@@ -62,16 +62,18 @@ def _para_iso(data_br):
     return datetime.strptime(data_br, "%d/%m/%Y").strftime("%Y-%m-%d")
 
 
-def coletar(offline=False):
+def coletar(offline=False, series=None):
     """
-    Coleta todas as séries de config.SERIES e grava no SQLite.
+    Coleta as séries do dicionário `series` (padrão: config.SERIES) e grava
+    no SQLite. Passe config.SERIES_IPCA15 para coletar as séries do IPCA-15.
 
     offline=True usa dados sintéticos (para testar o pipeline sem internet
     ou quando a API está fora). Em produção, rode com offline=False.
     """
+    series = config.SERIES if series is None else series
     db.inicializar()
     total = 0
-    for serie, (codigo, descricao) in config.SERIES.items():
+    for serie, (codigo, descricao) in series.items():
         db.registrar_serie(serie, codigo, descricao)
         if offline:
             registros = _dados_sinteticos(serie)

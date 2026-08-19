@@ -1,25 +1,46 @@
-# Agendamento em "produção" sem servidor próprio.
+# Agendamento em "produção" sem servidor próprio — boletim do IPCA cheio.
 #
 # As datas de divulgação do IPCA não seguem um padrão fixo de cron (variam
 # entre os dias ~5 e ~13 de cada mês). Em vez de tentar acertar o dia exato,
-# este workflow roda TODO DIA nessa janela, às 9h01 BRT (12:01 UTC), e o
-# script verificar_divulgacao_ipca.py decide — contra o calendário oficial
-# do IBGE — se é para valer ou não. Na maioria dos dias, ele apenas verifica
+# este workflow roda TODO DIA nessa janela, em dois horários, e o script
+# verificar_divulgacao_ipca.py decide — contra o calendário oficial do
+# IBGE — se é para valer ou não. Na maioria dos dias, ele apenas verifica
 # e não faz mais nada.
+#
+# DUAS EDIÇÕES no dia de divulgação:
+#   1ª edição — 9h10 BRT (12:10 UTC), logo após o IPCA sair. Os núcleos de
+#     inflação costumam demorar um pouco mais para serem divulgados pelo BC
+#     do que o índice cheio, então esta edição pode sair com o núcleo do
+#     mês anterior (a leitura do núcleo em `modelagem.media_nucleos_12m()`
+#     é tolerante a essa defasagem — não quebra, só reflete o dado mais
+#     recente disponível no SGS no momento da coleta).
+#   2ª edição — 12h00 BRT (15:00 UTC), mesmo dia. Roda o pipeline de novo
+#     (nova coleta) para capturar o núcleo já atualizado, se tiver saído
+#     nesse meio-tempo. O número da edição aparece no título do e-mail e no
+#     cabeçalho do PDF (relatorio.py, parâmetro `edicao`); os arquivos são
+#     os MESMOS nomes da 1ª edição — a 2ª sobrescreve, porque o número mais
+#     completo (com núcleo atualizado) deve prevalecer para aquele mês.
+#
+# github.event.schedule diz qual dos dois cron abaixo disparou a execução —
+# é assim que decidimos qual `--edicao` passar para o orquestrador.
 #
 # Quando é dia de divulgação: roda o pipeline completo e commita PDF, PNG
 # (gráfico), .txt e .html em saidas/ (normalmente ignorados pelo .gitignore
 # — forçado aqui de propósito) para que outras automações (ex.: envio de
 # e-mail) consigam detectar que saiu relatório novo hoje, sem precisar bater
-# nas APIs do BC/IBGE de novo. O .html (com o gráfico referenciado por URL
-# raw.githubusercontent.com, não embutido) vai no corpo do e-mail — nada de
-# anexo binário, que trava a ferramenta de e-mail conectada.
+# nas APIs do BC/IBGE de novo. O .html vai no corpo do e-mail — nada de
+# anexo binário, que trava a ferramenta de e-mail conectada (ver CLAUDE.md).
 name: monitor-inflacao
 
 on:
   schedule:
-    - cron: "1 12 5-13 * *"   # todo dia, do dia 5 ao 13 de cada mês, 12:01 UTC
-  workflow_dispatch: {}       # permite rodar manualmente pelo botão
+    - cron: "10 12 5-13 * *"   # 1ª edição: todo dia, do dia 5 ao 13, 9h10 BRT (12:10 UTC)
+    - cron: "0 15 5-13 * *"    # 2ª edição: todo dia, do dia 5 ao 13, 12h00 BRT (15:00 UTC)
+  workflow_dispatch:
+    inputs:
+      edicao:
+        description: "Número da edição (1 ou 2) — só usado em disparo manual"
+        default: "1"
 
 permissions:
   contents: write   # necessário para commitar o PDF de volta no repositório
@@ -42,15 +63,24 @@ jobs:
         run: python verificar_divulgacao_ipca.py
         continue-on-error: true
 
+      - name: Determinar número da edição
+        id: edicao
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 15 5-13 * *" ]; then
+            echo "numero=2" >> "$GITHUB_OUTPUT"
+          else
+            echo "numero=${{ github.event.inputs.edicao || '1' }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Rodar pipeline
         if: steps.divulgacao.outcome == 'success'
-        run: python orquestrador.py
+        run: python orquestrador.py --edicao=${{ steps.edicao.outputs.numero }}
 
       - name: Publicar relatório (artefato do run)
         if: steps.divulgacao.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: relatorio-ipca
+          name: relatorio-ipca-edicao-${{ steps.edicao.outputs.numero }}
           path: |
             saidas/*.pdf
             saidas/*.png
@@ -63,5 +93,5 @@ jobs:
           git config user.name "agente-inflacao-bot"
           git config user.email "actions@users.noreply.github.com"
           git add -f saidas/*.pdf saidas/*.png saidas/*.txt saidas/*.html
-          git commit -m "Relatório automático: $(date -u +%Y-%m-%d)" || echo "Nada para commitar"
+          git commit -m "Relatório automático (IPCA, ${{ steps.edicao.outputs.numero }}ª edição): $(date -u +%Y-%m-%d)" || echo "Nada para commitar"
           git push
