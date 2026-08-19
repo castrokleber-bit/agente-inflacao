@@ -215,13 +215,16 @@ def gerar_html(resultado):
     Versão em HTML do relatório, para o corpo de e-mails — visual parecido
     com o PDF (tabelas de KPI coloridas, gráfico, texto justificado).
 
-    O gráfico é referenciado por URL do GitHub (raw.githubusercontent.com),
-    não embutido em base64: o repositório é público, então a URL carrega
-    sozinha para quem recebe o e-mail. Testado e descartado embutir a imagem
-    como data URI (base64) — mesmo só ~59KB, isso já confundia a rotina
-    agendada o suficiente para ela desistir do HTML formatado e mandar um
-    e-mail em texto puro resumido em vez do relatório completo (ver
-    CLAUDE.md, seção Automação, para o histórico dessa investigação).
+    O gráfico é referenciado como `cid:grafico.png` — o padrão de e-mail para
+    imagem embutida via anexo inline (Content-ID), não por `<img src="URL">`.
+    Testado e confirmado: a ferramenta de e-mail remove qualquer tag `<img>`
+    com `src` apontando para uma URL externa antes de enviar (provavelmente
+    proteção contra pixel de rastreamento) — nem uma URL pública funciona.
+    Só o mecanismo de anexo inline de verdade (campo `attachments`, com
+    `inline: true` e `filename` casando com o `cid:` usado aqui) resulta na
+    imagem aparecendo. Quem gera o e-mail (a rotina agendada) precisa anexar
+    `saidas/grafico_ipca_AAAA_MM.png` como esse anexo inline — ver CLAUDE.md,
+    seção Automação, para o histórico completo dessa investigação.
 
     Cor de fundo das células via `background-color` + atributo `bgcolor`
     (não `background` sozinho — o Gmail costuma descartar essa propriedade
@@ -234,15 +237,7 @@ def gerar_html(resultado):
     ref = resultado["referencia"]
     caminho = config.OUTPUT_DIR / f"relatorio_ipca_{ref:%Y_%m}.html"
 
-    # Query string com o instante de geração: evita que o proxy de imagens
-    # do Gmail (ou de outro cliente de e-mail) sirva uma versão em cache de
-    # uma tentativa anterior — por exemplo, de antes do repositório virar
-    # público, quando a mesma URL (sem a query string) ainda retornava erro.
-    cache_bust = datetime.now().strftime("%Y%m%d%H%M%S")
-    grafico_src = (
-        f"{config.GITHUB_REPO_URL.replace('https://github.com/', 'https://raw.githubusercontent.com/')}"
-        f"/main/saidas/grafico_ipca_{ref:%Y_%m}.png?v={cache_bust}"
-    )
+    grafico_src = "cid:grafico.png"
     pdf_url = f"{config.GITHUB_REPO_URL}/blob/main/saidas/relatorio_ipca_{ref:%Y_%m}.pdf"
 
     azul, azul_claro = "#1f4e79", "#eef2f7"
