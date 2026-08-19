@@ -6,3 +6,4 @@ dados/macro.db
 dados/macro.db-*
 saidas/*.pdf
 saidas/*.png
+saidas/*.txt

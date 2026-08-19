@@ -7,10 +7,13 @@
 # do IBGE — se é para valer ou não. Na maioria dos dias, ele apenas verifica
 # e não faz mais nada.
 #
-# Quando é dia de divulgação: roda o pipeline completo e commita o PDF em
-# saidas/ (normalmente ignorado pelo .gitignore — forçado aqui de propósito)
-# para que outras automações (ex.: envio de e-mail) consigam detectar que
-# saiu relatório novo hoje, sem precisar bater nas APIs do BC/IBGE de novo.
+# Quando é dia de divulgação: roda o pipeline completo e commita o PDF (com
+# gráficos) e o .txt (mesmo conteúdo em texto plano, sem gráficos) em saidas/
+# (normalmente ignorados pelo .gitignore — forçado aqui de propósito) para
+# que outras automações (ex.: envio de e-mail) consigam detectar que saiu
+# relatório novo hoje, sem precisar bater nas APIs do BC/IBGE de novo. O
+# .txt existe para caber direto no corpo de um e-mail, sem precisar de
+# anexo binário.
 name: monitor-inflacao
 
 on:
@@ -48,13 +51,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: relatorio-ipca
-          path: saidas/*.pdf
+          path: |
+            saidas/*.pdf
+            saidas/*.txt
 
       - name: Commitar relatório no repositório
         if: steps.divulgacao.outcome == 'success'
         run: |
           git config user.name "agente-inflacao-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -f saidas/*.pdf
+          git add -f saidas/*.pdf saidas/*.txt
           git commit -m "Relatório automático: $(date -u +%Y-%m-%d)" || echo "Nada para commitar"
           git push

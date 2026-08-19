@@ -45,6 +45,10 @@ def _data_br(iso):
         return iso
 
 
+def _fmt(v, suf="%"):
+    return f"{v:.2f}{suf}" if v == v else "s/d"
+
+
 def _grafico(resultado):
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     caminho = config.OUTPUT_DIR / "grafico_ipca.png"
@@ -167,6 +171,44 @@ def _movimentos(r):
     return " ".join(partes)
 
 
+def gerar_texto(resultado):
+    """
+    Versão em texto plano do relatório — mesmo conteúdo do PDF (sem os
+    gráficos), pensada para caber direto no corpo de um e-mail sem precisar
+    de anexo binário. Grava em `saidas/relatorio_ipca_AAAA_MM.txt`.
+    """
+    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    ref = resultado["referencia"]
+    caminho = config.OUTPUT_DIR / f"relatorio_ipca_{ref:%Y_%m}.txt"
+
+    linhas = [
+        "MONITOR DE INFLAÇÃO — IPCA",
+        f"{config.INSTITUICAO}",
+        f"Referência: {MESES[ref.month]}/{ref.year}",
+        "",
+        f"No mês:            {resultado['no_mes']:.2f}%",
+        f"No ano:            {resultado['no_ano']:.2f}%",
+        f"Em 12 meses:       {resultado['em_12m']:.2f}%",
+        f"Desvio da meta:    {resultado['desvio_meta']:+.2f} p.p.",
+        f"Serviços 12m:      {_fmt(resultado['servicos_12m'])}",
+        f"Média núcleos 12m: {_fmt(resultado['nucleos_12m'])}",
+        f"Difusão:           {_fmt(resultado['difusao'])}",
+        f"Focus {resultado['focus_ano']}:         {_fmt(resultado['focus_mediana'])}",
+        "",
+        _comentario(resultado),
+        "",
+        "MOVIMENTOS DO MÊS",
+        _movimentos(resultado),
+        "",
+        "Fontes: Banco Central do Brasil — SGS (IPCA e recortes), IBGE/SIDRA "
+        "(peso por grupo) e Olinda/Expectativas de Mercado (mediana do "
+        "Focus). Documento gerado automaticamente pelo Agente de Inflação.",
+    ]
+    caminho.write_text("\n".join(linhas), encoding="utf-8")
+    log.info("Texto do relatório gerado: %s", caminho)
+    return caminho
+
+
 def gerar_pdf(resultado):
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     grafico = _grafico(resultado)
@@ -196,8 +238,6 @@ def gerar_pdf(resultado):
         [f"{resultado['no_mes']:.2f}%", f"{resultado['no_ano']:.2f}%",
          f"{resultado['em_12m']:.2f}%", f"{resultado['desvio_meta']:+.2f} p.p."],
     ]
-    def _fmt(v, suf="%"):
-        return f"{v:.2f}{suf}" if v == v else "s/d"
 
     kpis2 = [
         ["Serviços 12m", "Média núcleos 12m", "Difusão", f"Focus {resultado['focus_ano']}"],
