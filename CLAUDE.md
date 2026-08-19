@@ -89,24 +89,33 @@ em vez de recalcular na memória.
 ## Automação (agendamento + envio por e-mail)
 Desde 2026-08-19 o projeto vive em
 [github.com/castrokleber-bit/agente-inflacao](https://github.com/castrokleber-bit/agente-inflacao)
-(branch `main`) — necessário porque o agendamento roda na nuvem, sem acesso a
-este PC. Dois componentes:
+(branch `main`, **repositório público** desde 2026-08-19) — necessário porque
+o agendamento roda na nuvem, sem acesso a este PC, e o e-mail do relatório
+referencia o gráfico por URL pública do repositório. Dois componentes:
 - **`.github/workflows/pipeline.yml`** — roda todo dia às 9h01 BRT entre os
   dias 5 e 13 de cada mês (a data de divulgação do IPCA não segue um cron
   fixo). `verificar_divulgacao_ipca.py` confere o calendário oficial do IBGE
-  a cada execução; só roda o pipeline de fato e commita o PDF **e o `.txt`**
-  em `saidas/` (normalmente no `.gitignore` — forçado aqui de propósito) nos
-  dias reais.
+  a cada execução; só roda o pipeline de fato e commita PDF, PNG, `.txt` e
+  `.html` em `saidas/` (normalmente no `.gitignore` — forçado aqui de
+  propósito) nos dias reais.
 - **Rotina agendada Claude** (`trig_01CKj4ztEkkZ9Tbp71xGqDQ1`, gerenciável em
   claude.ai/code/routines) — roda ~19min depois (12:20 UTC), detecta se há
-  commit em `saidas/` datado de hoje e, se houver, lê o `.txt` e cola o
-  conteúdo direto no **corpo** do e-mail (Gmail conectado) para
-  kleberpcastro@gmail.com, com um link para o PDF no fim. **Não anexa o PDF**
-  — testado e comprovado que travava: montar um anexo binário de ~75KB em
-  base64 (~100K caracteres) dentro do contexto do agente, célula por célula,
-  para passar como argumento de uma chamada de ferramenta, é lento/trava a
-  ferramenta de e-mail conectada neste ambiente. O `.txt` (poucos KB) resolve
-  isso por completo. **Importante:** o sandbox dessa rotina tem egress de
-  rede bloqueado para APIs externas (SGS, Olinda, SIDRA) — por isso ela só
-  lê o que o GitHub Actions já commitou, nunca roda `orquestrador.py` nem
-  chama essas APIs diretamente.
+  commit em `saidas/` datado de hoje e, se houver, lê o `.html` e usa o
+  parâmetro `htmlBody` da ferramenta de Gmail conectada (com fallback para o
+  `.txt` puro se a ferramenta não suportasse HTML) para enviar o relatório
+  formatado (tabelas coloridas, texto justificado, gráfico) para
+  kleberpcastro@gmail.com. **Nunca anexa arquivo nenhum** — duas lições
+  aprendidas na prática, ambas testadas e comprovadas nesta rotina:
+  1. Anexar o PDF (~75KB → ~100K caracteres em base64) trava a ferramenta de
+     e-mail — o agente precisa montar esse payload célula por célula dentro
+     do próprio contexto, e isso não termina.
+  2. Embutir só o gráfico como *data URI* base64 (~59KB → ~80K caracteres)
+     não trava, mas confunde a rotina o suficiente para ela abandonar o HTML
+     formatado e mandar texto puro resumido em vez do relatório completo.
+  A solução foi tornar o repositório público e o `.html` referenciar o
+  gráfico por URL (`raw.githubusercontent.com/.../saidas/grafico_ipca_AAAA_MM.png`)
+  — nada de binário passa pelo contexto do agente, só texto leve (poucos KB).
+  **Importante:** o sandbox dessa rotina tem egress de rede bloqueado para
+  APIs externas (SGS, Olinda, SIDRA) — por isso ela só lê o que o GitHub
+  Actions já commitou, nunca roda `orquestrador.py` nem chama essas APIs
+  diretamente.
