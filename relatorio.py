@@ -10,6 +10,7 @@ Só usa bibliotecas pip-instaláveis (matplotlib, reportlab) — nada preso a
 um ambiente específico, então roda igual no seu notebook e no servidor.
 """
 
+import base64
 import logging
 from datetime import datetime
 
@@ -213,35 +214,41 @@ def gerar_texto(resultado):
 def gerar_html(resultado):
     """
     Versão em HTML do relatório, para o corpo de e-mails — visual parecido
-    com o PDF (tabelas de KPI coloridas, gráfico), mas leve: o gráfico é
-    referenciado por URL do GitHub (raw.githubusercontent.com) em vez de
-    embutido em base64, para não repetir o travamento que anexos binários
-    causavam na rotina agendada (ver CLAUDE.md, seção Automação). Grava em
-    `saidas/relatorio_ipca_AAAA_MM.html`.
+    com o PDF (tabelas de KPI coloridas, gráfico, texto justificado).
+
+    Duas escolhas específicas de e-mail HTML (repositório é privado, então
+    uma URL de imagem hospedada lá não é acessível de fora):
+    - Cor de fundo das células via `background-color` + atributo `bgcolor`
+      (não `background` sozinho — o Gmail costuma descartar essa propriedade
+      shorthand, o que deixava o texto branco do cabeçalho invisível sobre
+      fundo branco).
+    - Gráfico embutido como data URI (base64), não por URL — evita expor o
+      repositório publicamente só para a imagem carregar.
+
+    Grava em `saidas/relatorio_ipca_AAAA_MM.html`.
     """
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     ref = resultado["referencia"]
     caminho = config.OUTPUT_DIR / f"relatorio_ipca_{ref:%Y_%m}.html"
 
-    raw_base = config.GITHUB_REPO_URL.replace(
-        "https://github.com/", "https://raw.githubusercontent.com/"
-    ) + "/main"
-    blob_base = config.GITHUB_REPO_URL + "/blob/main"
-    grafico_url = f"{raw_base}/saidas/grafico_ipca_{ref:%Y_%m}.png"
-    pdf_url = f"{blob_base}/saidas/relatorio_ipca_{ref:%Y_%m}.pdf"
+    grafico_path = _grafico(resultado)
+    grafico_b64 = base64.b64encode(grafico_path.read_bytes()).decode("ascii")
+    grafico_src = f"data:image/png;base64,{grafico_b64}"
+    pdf_url = f"{config.GITHUB_REPO_URL}/blob/main/saidas/relatorio_ipca_{ref:%Y_%m}.pdf"
 
     azul, azul_claro = "#1f4e79", "#eef2f7"
     verde, verde_claro = "#2e5a2e", "#eef4ee"
 
     def _kpi_table(cabecalho, valores, destaque, fundo):
         celulas_cab = "".join(
-            f'<td style="background:{destaque};color:#ffffff;padding:8px 4px;'
-            f'text-align:center;font-size:11px;font-family:Arial,sans-serif;">{c}</td>'
+            f'<td bgcolor="{destaque}" style="background-color:{destaque};color:#ffffff;'
+            f'padding:8px 4px;text-align:center;font-size:11px;font-family:Arial,sans-serif;">{c}</td>'
             for c in cabecalho
         )
         celulas_val = "".join(
-            f'<td style="background:{fundo};padding:10px 4px;text-align:center;'
-            f'font-size:16px;font-weight:bold;font-family:Arial,sans-serif;color:#222222;">{v}</td>'
+            f'<td bgcolor="{fundo}" style="background-color:{fundo};padding:10px 4px;'
+            f'text-align:center;font-size:16px;font-weight:bold;font-family:Arial,sans-serif;'
+            f'color:#222222;">{v}</td>'
             for v in valores
         )
         return (
@@ -272,13 +279,13 @@ def gerar_html(resultado):
   {kpis1}
   {kpis2}
 
-  <p style="line-height:1.55;font-size:14px;margin:16px 0;">{_comentario(resultado)}</p>
+  <p style="line-height:1.55;font-size:14px;margin:16px 0;text-align:justify;">{_comentario(resultado)}</p>
 
-  <img src="{grafico_url}" alt="Gráficos do IPCA" style="max-width:100%;height:auto;
-       border:1px solid #dddddd;border-radius:4px;margin:8px 0 16px 0;" />
+  <img src="{grafico_src}" alt="Gráficos do IPCA" width="600" style="max-width:100%;height:auto;
+       display:block;border:1px solid #dddddd;border-radius:4px;margin:8px 0 16px 0;" />
 
   <h2 style="color:{azul};font-size:15px;margin:16px 0 6px 0;">Movimentos do mês</h2>
-  <p style="line-height:1.55;font-size:14px;margin:0 0 16px 0;">{_movimentos(resultado)}</p>
+  <p style="line-height:1.55;font-size:14px;margin:0 0 16px 0;text-align:justify;">{_movimentos(resultado)}</p>
 
   <p style="font-size:11px;color:#888888;line-height:1.5;margin-top:24px;">
     Fontes: Banco Central do Brasil — SGS (IPCA e recortes), IBGE/SIDRA (peso por grupo)
