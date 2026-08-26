@@ -9,8 +9,11 @@ permite dizer quem de fato "puxou" o IPCA no mês, em vez de comparar
 variações brutas de grupos com pesos muito diferentes.
 
 Endpoint (confirmado):
-  https://apisidra.ibge.gov.br/values/t/7060/n1/1/v/63,66,2265/p/last%201/
+  https://apisidra.ibge.gov.br/values/t/{tabela}/n1/1/v/{variáveis}/p/last%201/
   c315/{códigos}?formato=json
+Os códigos de variável do trio (variação mensal/peso mensal/variação 12m)
+são DIFERENTES entre a tabela 7060 (IPCA) e a 7062 (IPCA-15) — ver
+config.IBGE_SIDRA_VARIAVEIS.
 
 Guardamos só o mês mais recente disponível — a série histórica de variação
 do IPCA cheio já vem do SGS (ipca_geral); aqui o interesse é a fotografia
@@ -29,10 +32,10 @@ import db
 log = logging.getLogger("ibge")
 
 
-def _consultar_sidra(codigos, tabela):
+def _consultar_sidra(codigos, tabela, variaveis):
     url = config.IBGE_SIDRA_BASE_URL.format(
         tabela=tabela,
-        variaveis=config.IBGE_SIDRA_VARIAVEIS,
+        variaveis=",".join(variaveis.values()),
         codigos=",".join(str(c) for c in codigos),
     )
     ultimo_erro = None
@@ -60,12 +63,13 @@ def coletar(offline=False, indice="ipca"):
     """
     db.inicializar()
     tabela = config.IBGE_SIDRA_TABELA[indice]
+    variaveis = config.IBGE_SIDRA_VARIAVEIS[indice]
     catalogo = {**config.IBGE_GRUPOS, **config.IBGE_SUBGRUPOS}
 
     if offline:
         linhas = _dados_sinteticos(catalogo)
     else:
-        valores = _consultar_sidra(list(catalogo.keys()), tabela)
+        valores = _consultar_sidra(list(catalogo.keys()), tabela, variaveis)
         por_codigo = {}
         mes_ref = None
         for item in valores:
@@ -77,11 +81,11 @@ def coletar(offline=False, indice="ipca"):
             mes_ref = f"{periodo[:4]}-{periodo[4:]}-01"
             slot = por_codigo.setdefault(codigo, {})
             var_id = item["D2C"]
-            if var_id == "63":
+            if var_id == variaveis["mensal"]:
                 slot["variacao_mensal"] = float(valor)
-            elif var_id == "66":
+            elif var_id == variaveis["peso"]:
                 slot["peso_mensal"] = float(valor)
-            elif var_id == "2265":
+            elif var_id == variaveis["doze_meses"]:
                 slot["variacao_12m"] = float(valor)
 
         linhas = []

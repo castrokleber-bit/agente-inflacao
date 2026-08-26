@@ -65,7 +65,20 @@ SERIES = {
 IBGE_SIDRA_BASE_URL = (
     "https://apisidra.ibge.gov.br/values/t/{tabela}/n1/1/v/{variaveis}/p/last%201/c315/{codigos}"
 )
-IBGE_SIDRA_VARIAVEIS = "63,66,2265"  # variação mensal, peso mensal, variação 12 meses
+
+# Códigos de variável do SIDRA por índice — CONFIRMADO (2026-08-26, após
+# falha em produção) que as tabelas 7060 e 7062 usam códigos de variável
+# DIFERENTES para o mesmo conceito (variação mensal / peso mensal / variação
+# em 12 meses), apesar de reaproveitarem os mesmos códigos de classificação
+# c315 (ver IBGE_GRUPOS/IBGE_SUBGRUPOS abaixo). Usar o trio da 7060 contra a
+# 7062 (ou vice-versa) retorna 400 Bad Request da API SIDRA. Confirmado nos
+# metadados oficiais:
+#   https://servicodados.ibge.gov.br/api/v3/agregados/7060/metadados
+#   https://servicodados.ibge.gov.br/api/v3/agregados/7062/metadados
+IBGE_SIDRA_VARIAVEIS = {
+    "ipca":   {"mensal": "63",  "peso": "66",  "doze_meses": "2265"},
+    "ipca15": {"mensal": "355", "peso": "357", "doze_meses": "1120"},
+}
 
 # Tabela SIDRA por índice — 7060 (IPCA) e 7062 (IPCA-15) usam exatamente a
 # mesma classificação c315 (grupo/subgrupo/item/subitem com os MESMOS
