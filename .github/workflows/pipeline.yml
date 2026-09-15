@@ -2,56 +2,44 @@
 #
 # As datas de divulgação do IPCA não seguem um padrão fixo de cron (variam
 # entre os dias ~5 e ~13 de cada mês). Em vez de tentar acertar o dia exato,
-# este workflow roda TODO DIA nessa janela, em dois horários, e o script
+# este workflow roda TODO DIA nessa janela e o script
 # verificar_divulgacao_ipca.py decide — contra o calendário oficial do
 # IBGE — se é para valer ou não. Na maioria dos dias, ele apenas verifica
 # e não faz mais nada.
 #
-# DUAS EDIÇÕES no dia de divulgação:
-#   1ª edição — 9h10 BRT (12:10 UTC), logo após o IPCA sair. Os núcleos de
-#     inflação costumam demorar um pouco mais para serem divulgados pelo BC
-#     do que o índice cheio, então esta edição pode sair com o núcleo do
-#     mês anterior (a leitura do núcleo em `modelagem.media_nucleos_12m()`
-#     é tolerante a essa defasagem — não quebra, só reflete o dado mais
-#     recente disponível no SGS no momento da coleta).
-#   2ª edição — 12h00 BRT (15:00 UTC), mesmo dia. Roda o pipeline de novo
-#     (nova coleta) para capturar o núcleo já atualizado, se tiver saído
-#     nesse meio-tempo. O número da edição aparece no título do e-mail e no
-#     cabeçalho do PDF (relatorio.py, parâmetro `edicao`); os arquivos são
-#     os MESMOS nomes da 1ª edição — a 2ª sobrescreve, porque o número mais
-#     completo (com núcleo atualizado) deve prevalecer para aquele mês.
+# EDIÇÃO ÚNICA, às 12h BRT: o IPCA sai às 9h, mas os núcleos de inflação
+# costumam ser publicados pelo BC um pouco depois; rodar só ao meio-dia
+# garante o núcleo já atualizado. (Até 2026-09 havia duas edições, 9h10 e
+# 12h — abandonadas: ver CLAUDE.md, seção Automação.)
 #
-# github.event.schedule diz qual dos dois cron abaixo disparou a execução —
-# é assim que decidimos qual `--edicao` passar para o orquestrador.
+# Minuto "quebrado" (07) de propósito: o GitHub atrasa mais os cron agendados
+# em hora cheia. Mesmo assim o GitHub NÃO garante o horário — em 2026-09 os
+# disparos chegaram com 3-4h de atraso. Por isso o e-mail NÃO é agendado por
+# horário: o último passo publica um *release* no GitHub, e é esse evento
+# que dispara a rotina do Claude que envia o e-mail (ver CLAUDE.md).
 #
 # Quando é dia de divulgação: roda o pipeline completo e commita PDF, PNG
 # (gráfico), .txt e .html em saidas/ (normalmente ignorados pelo .gitignore
-# — forçado aqui de propósito) para que outras automações (ex.: envio de
-# e-mail) consigam detectar que saiu relatório novo hoje, sem precisar bater
-# nas APIs do BC/IBGE de novo. O .html vai no corpo do e-mail — nada de
-# anexo binário, que trava a ferramenta de e-mail conectada (ver CLAUDE.md).
+# — forçado aqui de propósito) para que a rotina de e-mail leia o relatório
+# sem precisar bater nas APIs do BC/IBGE de novo. O .html vai no corpo do
+# e-mail — nada de anexo binário, que trava a ferramenta de e-mail conectada.
 name: monitor-inflacao
 
 on:
   schedule:
-    - cron: "10 12 5-13 * *"   # 1ª edição: todo dia, do dia 5 ao 13, 9h10 BRT (12:10 UTC)
-    - cron: "0 15 5-13 * *"    # 2ª edição: todo dia, do dia 5 ao 13, 12h00 BRT (15:00 UTC)
-  workflow_dispatch:
-    inputs:
-      edicao:
-        description: "Número da edição (1 ou 2) — só usado em disparo manual"
-        default: "1"
+    - cron: "7 15 5-13 * *"   # todo dia, do dia 5 ao 13, 12h07 BRT (15:07 UTC)
+  workflow_dispatch: {}
 
 permissions:
-  contents: write   # necessário para commitar o PDF de volta no repositório
+  contents: write   # necessário para commitar o relatório e publicar o release
 
 jobs:
   executar:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -63,24 +51,15 @@ jobs:
         run: python verificar_divulgacao_ipca.py
         continue-on-error: true
 
-      - name: Determinar número da edição
-        id: edicao
-        run: |
-          if [ "${{ github.event.schedule }}" = "0 15 5-13 * *" ]; then
-            echo "numero=2" >> "$GITHUB_OUTPUT"
-          else
-            echo "numero=${{ github.event.inputs.edicao || '1' }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Rodar pipeline
         if: steps.divulgacao.outcome == 'success'
-        run: python orquestrador.py --edicao=${{ steps.edicao.outputs.numero }}
+        run: python orquestrador.py
 
       - name: Publicar relatório (artefato do run)
         if: steps.divulgacao.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: relatorio-ipca-edicao-${{ steps.edicao.outputs.numero }}
+          name: relatorio-ipca
           path: |
             saidas/*.pdf
             saidas/*.png
@@ -88,10 +67,35 @@ jobs:
             saidas/*.html
 
       - name: Commitar relatório no repositório
+        id: commit
         if: steps.divulgacao.outcome == 'success'
         run: |
           git config user.name "agente-inflacao-bot"
           git config user.email "actions@users.noreply.github.com"
           git add -f saidas/*.pdf saidas/*.png saidas/*.txt saidas/*.html
-          git commit -m "Relatório automático (IPCA, ${{ steps.edicao.outputs.numero }}ª edição): $(date -u +%Y-%m-%d)" || echo "Nada para commitar"
-          git push
+          if git diff --cached --quiet; then
+            echo "Nada para commitar"
+            echo "publicado=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Relatório automático (IPCA): $(date -u +%Y-%m-%d)"
+            git push
+            echo "publicado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Este release é o GATILHO do e-mail: a rotina do Claude escuta o evento
+      # "release publicado" deste repositório. Tag com a data do dia — se o
+      # workflow for rodado de novo no mesmo dia, o release já existe e não é
+      # recriado (evita e-mail duplicado).
+      - name: Publicar release (dispara o envio do e-mail)
+        if: steps.commit.outputs.publicado == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="ipca-$(date -u +%Y-%m-%d)"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG já existe — não recriado (e-mail não é reenviado)."
+          else
+            gh release create "$TAG" --target main \
+              --title "Monitor de Inflação — IPCA — $(date -u +%d/%m/%Y)" \
+              --notes "Relatório automático do IPCA publicado em saidas/."
+          fi

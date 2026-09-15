@@ -10,8 +10,12 @@
 # Nacional de Preços ao Consumidor Amplo 15") confirmados consultando
 # https://servicodados.ibge.gov.br/api/v3/calendario — datas de divulgação
 # do IPCA-15 caem tipicamente ao meio-dia (12:00 BRT); por isso o horário
-# abaixo (12h10 BRT) segue o mesmo padrão do IPCA cheio: roda 10 minutos
-# depois do horário usual de divulgação.
+# abaixo (12h10 BRT) roda 10 minutos depois do horário usual de divulgação.
+#
+# O GitHub NÃO garante o horário do cron (em 2026-09 houve 3-4h de atraso),
+# então o e-mail não é agendado por horário: o último passo publica um
+# *release* e é esse evento que dispara a rotina de envio (ver pipeline.yml
+# e CLAUDE.md).
 name: monitor-inflacao-ipca15
 
 on:
@@ -20,15 +24,15 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: write   # necessário para commitar o relatório e publicar o release
 
 jobs:
   executar:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -46,7 +50,7 @@ jobs:
 
       - name: Publicar relatório (artefato do run)
         if: steps.divulgacao.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: relatorio-ipca15
           path: |
@@ -56,10 +60,33 @@ jobs:
             saidas/*.html
 
       - name: Commitar relatório no repositório
+        id: commit
         if: steps.divulgacao.outcome == 'success'
         run: |
           git config user.name "agente-inflacao-bot"
           git config user.email "actions@users.noreply.github.com"
           git add -f saidas/*.pdf saidas/*.png saidas/*.txt saidas/*.html
-          git commit -m "Relatório automático (IPCA-15): $(date -u +%Y-%m-%d)" || echo "Nada para commitar"
-          git push
+          if git diff --cached --quiet; then
+            echo "Nada para commitar"
+            echo "publicado=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Relatório automático (IPCA-15): $(date -u +%Y-%m-%d)"
+            git push
+            echo "publicado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # GATILHO do e-mail (mesma lógica do pipeline.yml): release com a data
+      # do dia; não é recriado se o workflow rodar de novo no mesmo dia.
+      - name: Publicar release (dispara o envio do e-mail)
+        if: steps.commit.outputs.publicado == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="ipca15-$(date -u +%Y-%m-%d)"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG já existe — não recriado (e-mail não é reenviado)."
+          else
+            gh release create "$TAG" --target main \
+              --title "Monitor de Inflação — IPCA-15 — $(date -u +%d/%m/%Y)" \
+              --notes "Relatório automático do IPCA-15 publicado em saidas/."
+          fi

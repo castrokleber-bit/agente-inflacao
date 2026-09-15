@@ -6,13 +6,12 @@ Cada etapa "passa a bola" para a próxima. Se uma falha, o erro é registrado
 com contexto suficiente para diagnóstico (ou para o agente se autocorrigir).
 
 Uso:
-    python orquestrador.py                        # produção, IPCA, 1ª edição
+    python orquestrador.py                        # produção, IPCA
     python orquestrador.py --offline               # demonstração com dados sintéticos
     python orquestrador.py --indice=ipca15          # boletim do IPCA-15 (sem núcleo)
-    python orquestrador.py --edicao=2               # 2ª edição do dia (núcleo atualizado)
 
-`--edicao` só afeta o IPCA cheio (título do e-mail e cabeçalho do PDF); o
-IPCA-15 tem edição única. `--indice` aceita "ipca" (padrão) ou "ipca15".
+`--indice` aceita "ipca" (padrão) ou "ipca15". Os dois boletins saem em
+edição única por divulgação.
 
 Este é o arquivo que você agenda (cron, Task Scheduler, GitHub Actions)
 para rodar toda manhã.
@@ -41,11 +40,10 @@ def configurar_log():
     )
 
 
-def executar(offline=False, indice="ipca", edicao=1):
+def executar(offline=False, indice="ipca"):
     log = logging.getLogger("orquestrador")
     inicio = datetime.now()
-    log.info("=== Pipeline iniciado (offline=%s, indice=%s, edicao=%s) ===",
-              offline, indice, edicao)
+    log.info("=== Pipeline iniciado (offline=%s, indice=%s) ===", offline, indice)
 
     try:
         if indice == "ipca15":
@@ -71,9 +69,9 @@ def executar(offline=False, indice="ipca", edicao=1):
         log.info("[2-3/4] Modelagem: %s 12m = %.2f%%.", indice.upper(), resultado["em_12m"])
 
         # ROBÔ 4 — relatório (PDF com gráficos, .txt e .html para e-mail)
-        pdf = relatorio.gerar_pdf(resultado, edicao=edicao)
-        texto = relatorio.gerar_texto(resultado, edicao=edicao)
-        html = relatorio.gerar_html(resultado, edicao=edicao)
+        pdf = relatorio.gerar_pdf(resultado)
+        texto = relatorio.gerar_texto(resultado)
+        html = relatorio.gerar_html(resultado)
         log.info("[4/4] Relatório: %s (+ %s, %s)", pdf, texto, html)
 
         dur = (datetime.now() - inicio).total_seconds()
@@ -90,18 +88,15 @@ def executar(offline=False, indice="ipca", edicao=1):
 def _parse_args(argv):
     offline = "--offline" in argv
     indice = "ipca"
-    edicao = 1
     for arg in argv:
         if arg.startswith("--indice="):
             indice = arg.split("=", 1)[1]
-        elif arg.startswith("--edicao="):
-            edicao = int(arg.split("=", 1)[1])
     if indice not in ("ipca", "ipca15"):
         raise ValueError(f"--indice inválido: {indice!r} (use 'ipca' ou 'ipca15')")
-    return offline, indice, edicao
+    return offline, indice
 
 
 if __name__ == "__main__":
     configurar_log()
-    _offline, _indice, _edicao = _parse_args(sys.argv[1:])
-    executar(offline=_offline, indice=_indice, edicao=_edicao)
+    _offline, _indice = _parse_args(sys.argv[1:])
+    executar(offline=_offline, indice=_indice)

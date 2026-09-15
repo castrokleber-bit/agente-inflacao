@@ -12,12 +12,8 @@ o IPCA-15 não tem núcleos/serviços/duráveis/monitorados/difusão (o BC não
 publica essas aberturas para a prévia — ver config.py), então essas seções
 são omitidas e a ausência é destacada explicitamente no texto.
 
-O parâmetro `edicao` (1 ou 2) só é relevante para o IPCA cheio: a 1ª edição
-sai logo após a divulgação do IPCA, quando os núcleos do mês ainda podem
-não ter sido publicados pelo BC; a 2ª edição roda mais tarde no mesmo dia,
-com os núcleos atualizados. O número da edição aparece no título do
-e-mail/HTML e no cabeçalho do PDF. O IPCA-15 não tem esse conceito (edição
-única) e por isso ignora `edicao`.
+Os dois boletins saem em edição única por divulgação (o do IPCA roda ao
+meio-dia, já com os núcleos do mês publicados pelo BC).
 
 Só usa bibliotecas pip-instaláveis (matplotlib, reportlab) — nada preso a
 um ambiente específico, então roda igual no seu notebook e no servidor.
@@ -53,9 +49,7 @@ OBSERVACAO_IPCA15 = (
     "Observação: o IPCA-15 não conta com as aberturas de núcleos de inflação, "
     "quebra por durabilidade, preços monitorados nem índice de difusão — o "
     "Banco Central calcula esses recortes apenas para o IPCA cheio, a partir "
-    "de microdados do IBGE, e não os replica para a prévia. Por não ter "
-    "núcleo de inflação, o boletim do IPCA-15 tem edição única — sem o "
-    "conceito de 2ª edição (núcleo atualizado) que existe no IPCA cheio."
+    "de microdados do IBGE, e não os replica para a prévia."
 )
 
 
@@ -80,13 +74,6 @@ def _base_nome(r):
 
 def _rotulo_indice(r):
     return "IPCA-15" if _base_nome(r) == "ipca15" else "IPCA"
-
-
-def _rotulo_edicao(r, edicao):
-    """" — Nª edição" para o IPCA cheio; vazio para o IPCA-15 (edição única)."""
-    if _base_nome(r) == "ipca15" or not edicao:
-        return ""
-    return f" — {edicao}ª edição"
 
 
 def _kpis(r):
@@ -243,7 +230,7 @@ def _movimentos(r):
     return " ".join(partes)
 
 
-def gerar_texto(resultado, edicao=1):
+def gerar_texto(resultado):
     """
     Versão em texto plano do relatório — mesmo conteúdo do PDF (sem os
     gráficos), pensada para caber direto no corpo de um e-mail sem precisar
@@ -253,14 +240,13 @@ def gerar_texto(resultado, edicao=1):
     ref = resultado["referencia"]
     base = _base_nome(resultado)
     rotulo = _rotulo_indice(resultado)
-    sufixo_edicao = _rotulo_edicao(resultado, edicao)
     caminho = config.OUTPUT_DIR / f"relatorio_{base}_{ref:%Y_%m}.txt"
 
     cab1, val1, cab2, val2 = _kpis(resultado)
     linhas_kpi2 = [f"{c}:  {v}" for c, v in zip(cab2, val2)]
 
     linhas = [
-        f"MONITOR DE INFLAÇÃO — {rotulo}{sufixo_edicao}",
+        f"MONITOR DE INFLAÇÃO — {rotulo}",
         f"{config.INSTITUICAO}",
         f"Referência: {MESES[ref.month]}/{ref.year}",
         "",
@@ -289,7 +275,7 @@ def gerar_texto(resultado, edicao=1):
     return caminho
 
 
-def gerar_html(resultado, edicao=1):
+def gerar_html(resultado):
     """
     Versão em HTML do relatório, para o corpo de e-mails — visual parecido
     com o PDF (tabelas de KPI coloridas, texto justificado).
@@ -315,7 +301,6 @@ def gerar_html(resultado, edicao=1):
     ref = resultado["referencia"]
     base = _base_nome(resultado)
     rotulo = _rotulo_indice(resultado)
-    sufixo_edicao = _rotulo_edicao(resultado, edicao)
     caminho = config.OUTPUT_DIR / f"relatorio_{base}_{ref:%Y_%m}.html"
 
     pdf_url = f"{config.GITHUB_REPO_URL}/blob/main/saidas/relatorio_{base}_{ref:%Y_%m}.pdf"
@@ -352,7 +337,7 @@ def gerar_html(resultado, edicao=1):
 
     html = f"""\
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222222;">
-  <h1 style="color:{azul};font-size:22px;margin:0 0 2px 0;">Monitor de Inflação — {rotulo}{sufixo_edicao}</h1>
+  <h1 style="color:{azul};font-size:22px;margin:0 0 2px 0;">Monitor de Inflação — {rotulo}</h1>
   <p style="color:{azul};font-size:12px;margin:0 0 16px 0;">
     {config.INSTITUICAO} &middot; referência: {MESES[ref.month]}/{ref.year}
   </p>
@@ -378,13 +363,12 @@ def gerar_html(resultado, edicao=1):
     return caminho
 
 
-def gerar_pdf(resultado, edicao=1):
+def gerar_pdf(resultado):
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     grafico = _grafico(resultado)
     ref = resultado["referencia"]
     base = _base_nome(resultado)
     rotulo = _rotulo_indice(resultado)
-    sufixo_edicao = _rotulo_edicao(resultado, edicao)
     caminho = config.OUTPUT_DIR / f"relatorio_{base}_{ref:%Y_%m}.pdf"
 
     styles = getSampleStyleSheet()
@@ -402,7 +386,7 @@ def gerar_pdf(resultado, edicao=1):
         str(caminho), pagesize=A4,
         topMargin=1.4 * cm, bottomMargin=1.2 * cm,
         leftMargin=2 * cm, rightMargin=2 * cm,
-        title=f"Monitor de Inflação — {rotulo}{sufixo_edicao} — {ref:%b/%Y}",
+        title=f"Monitor de Inflação — {rotulo} — {ref:%b/%Y}",
     )
 
     cab1, val1, cab2, val2 = _kpis(resultado)
@@ -432,7 +416,7 @@ def gerar_pdf(resultado, edicao=1):
                        destaque="#2e5a2e", fundo="#eef4ee")
 
     elems = [
-        Paragraph(f"Monitor de Inflação — {rotulo}{sufixo_edicao}", titulo),
+        Paragraph(f"Monitor de Inflação — {rotulo}", titulo),
         Paragraph(f"{config.INSTITUICAO}  ·  referência: {MESES[ref.month]}/{ref.year}  ·  "
                   f"gerado em {datetime.now():%d/%m/%Y %H:%M}", subt),
         tabela,

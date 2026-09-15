@@ -27,13 +27,11 @@ Dois boletins com o mesmo molde, selecionados por `orquestrador.py --indice=`:
 IPCA-15 **não tem** núcleos, quebra por durabilidade, monitorados nem
 difusão — o BC só calcula essas aberturas para o índice cheio (ver
 "Pendência conhecida" abaixo) — então o boletim do IPCA-15 omite essas
-seções e destaca a ausência explicitamente no texto. Por não ter núcleo,
-o IPCA-15 também **não tem o conceito de 2ª edição** — sai numa edição
-única. O IPCA cheio sai em
-**duas edições** no dia de divulgação (`--edicao=1` e `--edicao=2`): os
-núcleos costumam ser publicados pelo BC um pouco depois do índice cheio, e a
-2ª edição roda mais tarde no mesmo dia para capturar o núcleo já atualizado.
-O número da edição aparece no `<h1>` do e-mail/HTML e no cabeçalho do PDF.
+seções e destaca a ausência explicitamente no texto. Os dois boletins saem
+em **edição única** por divulgação. O do IPCA roda ao meio-dia (não às 9h,
+quando o índice sai) porque os núcleos costumam ser publicados pelo BC um
+pouco depois do índice cheio. Até 2026-09 havia duas edições do IPCA (9h10 e
+12h, `--edicao=1/2`); a 1ª foi abandonada em 2026-09-15 — não reintroduza.
 
 ## Regras de trabalho (obedeça sempre)
 - **Fonte primária é o SGS do Banco Central.** Nunca invente números; se um
@@ -103,11 +101,9 @@ aqui e em `config.py` — se precisar de um recorte que o BC não publica,
 a única fonte real é a tabela 7062 do SIDRA (grupo/subgrupo), não o SGS.
 
 ## Comandos úteis
-- `python orquestrador.py` — pipeline completo (produção), IPCA, 1ª edição.
+- `python orquestrador.py` — pipeline completo (produção), IPCA.
 - `python orquestrador.py --offline` — demonstração sem internet.
 - `python orquestrador.py --indice=ipca15` — boletim do IPCA-15 (sem núcleo).
-- `python orquestrador.py --edicao=2` — 2ª edição do dia (só afeta o IPCA
-  cheio: título do e-mail/HTML e cabeçalho do PDF; IPCA-15 ignora).
 - `python modelagem.py` — recalcula e imprime os números-chave (IPCA).
 - Cada robô roda isolado (não há suíte de testes; o bloco `if __name__` de
   cada arquivo é o smoke test): `python coleta.py --offline`,
@@ -146,55 +142,66 @@ em vez de recalcular na memória.
 Desde 2026-08-19 o projeto vive em
 [github.com/castrokleber-bit/agente-inflacao](https://github.com/castrokleber-bit/agente-inflacao)
 (branch `main`, repositório público) — necessário porque o agendamento roda
-na nuvem, sem acesso a este PC. Dois workflows do GitHub Actions + três
-rotinas agendadas do Claude (uma por e-mail a enviar):
+na nuvem, sem acesso a este PC. Dois workflows do GitHub Actions geram e
+commitam os relatórios; UMA rotina do Claude envia o e-mail, disparada pela
+**publicação do relatório** (release no GitHub), não por horário.
 
-**`.github/workflows/pipeline.yml`** (IPCA cheio) — roda em DOIS horários,
-todo dia entre os dias 5 e 13 do mês (a data de divulgação não segue um cron
-fixo; `verificar_divulgacao_ipca.py` confere o calendário oficial do IBGE a
-cada execução e só segue adiante nos dias reais):
-- **9h10 BRT (12:10 UTC) → `--edicao=1`.**
-- **12h00 BRT (15:00 UTC) → `--edicao=2`** (roda a coleta de novo; o núcleo
-  de inflação costuma ser publicado pelo BC um pouco depois do índice cheio,
-  então esta 2ª rodada tende a capturar o número atualizado). `github.event.
-  schedule` no workflow decide qual `--edicao` passar.
-Cada rodada **sobrescreve os MESMOS arquivos** (`relatorio_ipca_AAAA_MM.*`) —
-não há sufixo de edição no nome; o número da edição fica só no `<h1>`/título
-do arquivo. Isso é proposital: o conteúdo mais completo (com núcleo
-atualizado) deve prevalecer para aquele mês, inclusive no link do PDF que já
-foi mandado por e-mail na 1ª edição.
+**`.github/workflows/pipeline.yml`** (IPCA cheio) — todo dia entre os dias 5
+e 13 do mês, uma vez, às **12h07 BRT (15:07 UTC)** (a data de divulgação não
+segue um cron fixo; `verificar_divulgacao_ipca.py` confere o calendário
+oficial do IBGE e só segue adiante nos dias reais). Edição única, ao
+meio-dia para já pegar o núcleo do mês. Grava `relatorio_ipca_AAAA_MM.*`,
+commita e, se houve commit, publica o release **`ipca-AAAA-MM-DD`**.
 
 **`.github/workflows/pipeline_ipca15.yml`** (IPCA-15) — mesma lógica, janela
 e produto do calendário DIFERENTES (dias 19-28, produto_id 9260 — ver seção
-"IPCA-15" acima), roda uma vez só às 12h10 BRT (15:10 UTC) → `python
-orquestrador.py --indice=ipca15` (edição única, sem o conceito de núcleo
-atrasado). Arquivos gerados com prefixo `ipca15` (`relatorio_ipca15_*`,
-`grafico_ipca15_*`), sem colidir com os do IPCA cheio.
+"IPCA-15" acima), às 12h10 BRT (15:10 UTC) → `python orquestrador.py
+--indice=ipca15`. Arquivos com prefixo `ipca15` (`relatorio_ipca15_*`,
+`grafico_ipca15_*`), sem colidir com os do IPCA cheio. Publica o release
+**`ipca15-AAAA-MM-DD`**.
 
-**Três rotinas agendadas do Claude** (claude.ai/code/routines), cada uma
-lendo o `.html` correspondente já commitado pelo GitHub Actions e enviando
-por `mcp__Gmail__send_message` (`htmlBody`, com fallback para `.txt`) — 
+Em ambos, o release **não é recriado** se a tag do dia já existir (rodar o
+workflow de novo no mesmo dia não reenvia e-mail).
+
+### Por que o e-mail é disparado por release (incidente de 2026-09-11)
+O GitHub **não garante o horário do cron**: em 2026-09-10/11/12 os disparos
+chegaram com 3-4h de atraso (12:10 UTC → 16:22; 15:00 UTC → 18:11). As
+rotinas de e-mail, agendadas para 15-20 min depois do horário nominal,
+rodaram antes do commit, viram "nenhum relatório hoje" e pararam — o
+relatório de 11/09 foi gerado mas nenhum e-mail saiu. **Não volte a agendar
+o envio por horário.** Rotinas do Claude só aceitam gatilho do GitHub em
+*pull request* ou *release* (não em push) — daí o release. O aviso "Node.js
+20 is deprecated" que aparecia no Actions era só alerta, sem relação.
+
+**Rotina de envio do Claude** (claude.ai/code/routines), lendo o `.html`
+já commitado pelo GitHub Actions e enviando por `mcp__Gmail__send_message`
+(`htmlBody`, com fallback para `.txt`) — 
 **sem** rodar `orquestrador.py` nem chamar SGS/Olinda/SIDRA diretamente (o
 sandbox dessas rotinas tem egress de rede bloqueado para essas APIs; elas
 só leem o que o GitHub Actions já commitou):
 
-Desde 2026-08-19, os destinatários fixos das três rotinas (todos em `to`)
+Desde 2026-08-19, os destinatários fixos (todos em `to`)
 são: fernando.almeida@cni.com.br, mamorim@senaicni.com.br,
 virginia.colusso@cni.com.br e kleber.castro@cni.com.br. E-mails de falha
 (quando o commit de hoje existe mas o envio dá erro) vão só para
 kleber.castro@cni.com.br. Antes dessa mudança de lista, os testes usaram
 kleberpcastro@gmail.com — histórico irrelevante agora.
-- `trig_01CKj4ztEkkZ9Tbp71xGqDQ1` — **"1ª edição"**, roda 12:25 UTC (9h25
-  BRT), lê `relatorio_ipca_AAAA_MM.html`.
-- `trig_01GtLbFED522hoz12jfdUeXn` — **"2ª edição"**, roda 15:20 UTC (12h20
-  BRT), lê o MESMO arquivo (já sobrescrito) — mas só envia se o `<h1>`
-  dentro do arquivo já disser "2ª edição" (evita reenviar/duplicar a 1ª
-  edição caso a rodada das 12h ainda não tenha commitado).
-- `trig_01XZzPFeLPERg84KuCouoci7` — **"IPCA-15"**, roda 15:30 UTC (12h30
-  BRT), lê `relatorio_ipca15_AAAA_MM.html`.
-Em todos os casos o **assunto do e-mail é derivado do `<h1>` literal do
-arquivo** (nunca hardcoded na rotina) — é o `<h1>` de `relatorio.py` que
-carrega o rótulo do índice e o número da edição corretos.
+- `trig_01GtLbFED522hoz12jfdUeXn` — **"envio por publicação"**, atende os
+  DOIS índices. Gatilho principal: evento GitHub `release.published` neste
+  repositório (exige o app Claude do GitHub instalado no repo). Descobre o
+  índice pela mensagem do último commit em `saidas/` ("(IPCA)" ou
+  "(IPCA-15)") e lê `relatorio_ipca_AAAA_MM.html` ou
+  `relatorio_ipca15_AAAA_MM.html`. Gatilho reserva: agendamento às 21:00 UTC
+  (18h BRT) nos dias 5-13 e 19-28, caso o evento do GitHub seja descartado
+  (há limite por hora na prévia). Antes de enviar, procura no Gmail
+  (enviados, hoje) um e-mail com o mesmo assunto — se já existe, não
+  reenvia; é isso que impede duplicata entre o release e o reserva.
+- `trig_01CKj4ztEkkZ9Tbp71xGqDQ1` (antiga "1ª edição") e
+  `trig_01XZzPFeLPERg84KuCouoci7` (antiga "IPCA-15" por horário) —
+  **desativadas** em 2026-09-15.
+O **assunto do e-mail é derivado do `<h1>` literal do arquivo** (nunca
+hardcoded na rotina) — é o `<h1>` de `relatorio.py` que carrega o rótulo do
+índice.
 
 ### Por que o e-mail NÃO tem o gráfico embutido (decisão deliberada)
 Três mecanismos foram testados na prática, nesta ordem, todos malsucedidos —
