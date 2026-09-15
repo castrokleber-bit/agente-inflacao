@@ -206,7 +206,7 @@ META_INFLACAO = 3.0          # centro da meta (%)
 META_TOLERANCIA = 1.5        # banda (± p.p.)
 
 # --- Rótulo institucional (cabeçalho do relatório) --------------------------
-INSTITUICAO = "GPE — Gerência Executiva de Política Econômica"
+INSTITUICAO = "GPE — Gerência de Política Econômica"
 AUTOR_RELATORIO = "Agente de Inflação (automatizado)"
 
 # --- Robustez de rede -------------------------------------------------------

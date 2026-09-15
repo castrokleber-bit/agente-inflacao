@@ -27,11 +27,11 @@ Dois boletins com o mesmo molde, selecionados por `orquestrador.py --indice=`:
 IPCA-15 **não tem** núcleos, quebra por durabilidade, monitorados nem
 difusão — o BC só calcula essas aberturas para o índice cheio (ver
 "Pendência conhecida" abaixo) — então o boletim do IPCA-15 omite essas
-seções e destaca a ausência explicitamente no texto. Os dois boletins saem
-em **edição única** por divulgação. O do IPCA roda ao meio-dia (não às 9h,
+seções e destaca a ausência explicitamente no texto. Cada divulgação gera
+**um único boletim**, sem numeração. O do IPCA roda ao meio-dia (não às 9h,
 quando o índice sai) porque os núcleos costumam ser publicados pelo BC um
-pouco depois do índice cheio. Até 2026-09 havia duas edições do IPCA (9h10 e
-12h, `--edicao=1/2`); a 1ª foi abandonada em 2026-09-15 — não reintroduza.
+pouco depois do índice cheio. Não crie versões numeradas do boletim nem
+cite numeração em título, assunto ou cabeçalho.
 
 ## Regras de trabalho (obedeça sempre)
 - **Fonte primária é o SGS do Banco Central.** Nunca invente números; se um
@@ -149,8 +149,8 @@ commitam os relatórios; UMA rotina do Claude envia o e-mail, disparada pela
 **`.github/workflows/pipeline.yml`** (IPCA cheio) — todo dia entre os dias 5
 e 13 do mês, uma vez, às **12h07 BRT (15:07 UTC)** (a data de divulgação não
 segue um cron fixo; `verificar_divulgacao_ipca.py` confere o calendário
-oficial do IBGE e só segue adiante nos dias reais). Edição única, ao
-meio-dia para já pegar o núcleo do mês. Grava `relatorio_ipca_AAAA_MM.*`,
+oficial do IBGE e só segue adiante nos dias reais). Roda ao meio-dia para
+já pegar o núcleo do mês. Grava `relatorio_ipca_AAAA_MM.*`,
 commita e, se houve commit, publica o release **`ipca-AAAA-MM-DD`**.
 
 **`.github/workflows/pipeline_ipca15.yml`** (IPCA-15) — mesma lógica, janela
@@ -201,7 +201,7 @@ kleberpcastro@gmail.com — histórico irrelevante agora.
   relatório mais recente em `saidas/` (qualquer data). A rotina lê a tag no
   bloco `<github-trigger-context>` que o disparo injeta. Apague o release e
   a tag depois do teste (validado em 2026-09-15, tag `teste-2026-09-15`).
-- `trig_01CKj4ztEkkZ9Tbp71xGqDQ1` (antiga "1ª edição") e
+- `trig_01CKj4ztEkkZ9Tbp71xGqDQ1` (antiga rotina do IPCA das 9h25) e
   `trig_01XZzPFeLPERg84KuCouoci7` (antiga "IPCA-15" por horário) —
   **desativadas** em 2026-09-15.
 O **assunto do e-mail é derivado do `<h1>` literal do arquivo** (nunca

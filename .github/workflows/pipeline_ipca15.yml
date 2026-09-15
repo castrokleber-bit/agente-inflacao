@@ -1,10 +1,9 @@
 # Agendamento em "produção" sem servidor próprio — boletim do IPCA-15
 # (prévia da inflação). Réplica do pipeline.yml (IPCA cheio), mesma lógica
 # de "roda todo dia numa janela e deixa o calendário do IBGE decidir se vale
-# a pena", mas com sua PRÓPRIA janela de dias e SEM o conceito de 2ª edição
-# (não há núcleo de inflação no IPCA-15 — ver config.py e relatorio.py — logo
-# não existe o problema de "núcleo atrasado" que motiva a 2ª edição do IPCA
-# cheio; uma coleta por divulgação basta).
+# a pena", mas com sua PRÓPRIA janela de dias. Não há núcleo de inflação no
+# IPCA-15 (ver config.py e relatorio.py), então pode rodar logo após a
+# divulgação — uma coleta por divulgação basta.
 #
 # Janela de dias (19 a 28) e produto do calendário do IBGE (9260 = "Índice
 # Nacional de Preços ao Consumidor Amplo 15") confirmados consultando

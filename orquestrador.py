@@ -10,8 +10,8 @@ Uso:
     python orquestrador.py --offline               # demonstração com dados sintéticos
     python orquestrador.py --indice=ipca15          # boletim do IPCA-15 (sem núcleo)
 
-`--indice` aceita "ipca" (padrão) ou "ipca15". Os dois boletins saem em
-edição única por divulgação.
+`--indice` aceita "ipca" (padrão) ou "ipca15". Cada divulgação gera um
+único boletim.
 
 Este é o arquivo que você agenda (cron, Task Scheduler, GitHub Actions)
 para rodar toda manhã.

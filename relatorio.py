@@ -12,8 +12,8 @@ o IPCA-15 não tem núcleos/serviços/duráveis/monitorados/difusão (o BC não
 publica essas aberturas para a prévia — ver config.py), então essas seções
 são omitidas e a ausência é destacada explicitamente no texto.
 
-Os dois boletins saem em edição única por divulgação (o do IPCA roda ao
-meio-dia, já com os núcleos do mês publicados pelo BC).
+Cada divulgação gera um único boletim (o do IPCA roda ao meio-dia, já com
+os núcleos do mês publicados pelo BC).
 
 Só usa bibliotecas pip-instaláveis (matplotlib, reportlab) — nada preso a
 um ambiente específico, então roda igual no seu notebook e no servidor.

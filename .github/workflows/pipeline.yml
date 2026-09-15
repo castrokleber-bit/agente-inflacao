@@ -7,10 +7,9 @@
 # IBGE — se é para valer ou não. Na maioria dos dias, ele apenas verifica
 # e não faz mais nada.
 #
-# EDIÇÃO ÚNICA, às 12h BRT: o IPCA sai às 9h, mas os núcleos de inflação
-# costumam ser publicados pelo BC um pouco depois; rodar só ao meio-dia
-# garante o núcleo já atualizado. (Até 2026-09 havia duas edições, 9h10 e
-# 12h — abandonadas: ver CLAUDE.md, seção Automação.)
+# Roda uma vez, às 12h BRT: o IPCA sai às 9h, mas os núcleos de inflação
+# costumam ser publicados pelo BC um pouco depois; rodar ao meio-dia
+# garante o núcleo já atualizado.
 #
 # Minuto "quebrado" (07) de propósito: o GitHub atrasa mais os cron agendados
 # em hora cheia. Mesmo assim o GitHub NÃO garante o horário — em 2026-09 os
