@@ -196,6 +196,11 @@ kleberpcastro@gmail.com — histórico irrelevante agora.
   (há limite por hora na prévia). Antes de enviar, procura no Gmail
   (enviados, hoje) um e-mail com o mesmo assunto — se já existe, não
   reenvia; é isso que impede duplicata entre o release e o reserva.
+  **Modo teste:** um release com tag `teste-...` faz a rotina enviar SÓ
+  para kleber.castro@cni.com.br, com "[TESTE]" no assunto, usando o
+  relatório mais recente em `saidas/` (qualquer data). A rotina lê a tag no
+  bloco `<github-trigger-context>` que o disparo injeta. Apague o release e
+  a tag depois do teste (validado em 2026-09-15, tag `teste-2026-09-15`).
 - `trig_01CKj4ztEkkZ9Tbp71xGqDQ1` (antiga "1ª edição") e
   `trig_01XZzPFeLPERg84KuCouoci7` (antiga "IPCA-15" por horário) —
   **desativadas** em 2026-09-15.
